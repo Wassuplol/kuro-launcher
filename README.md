@@ -14,6 +14,26 @@ into `RobloxPlayerBeta.exe`, and it does not touch Hyperion. It does not offer
 region changes, fake presence or hardware spoofing. The only thing it does to
 Roblox is speak the same protocols the website speaks.
 
+## Screens
+
+Captured from this build, not from a mockup.
+
+**Intro**
+
+![Intro](shots/m1-intro.png)
+
+**First run, three questions**
+
+![First run](shots/m1-onboarding-1.png)
+
+**Home, with nothing connected yet**
+
+![Home](shots/m1-home.png)
+
+**Command palette on Ctrl K**
+
+![Command palette](shots/m1-palette.png)
+
 ## Build from source
 
 Requirements: Windows 10 or 11, Node 22 or newer, pnpm 10 or newer, Rust stable,
