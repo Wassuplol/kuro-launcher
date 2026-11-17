@@ -1,17 +1,21 @@
 """Builds the two animated SVG banners from Inter itself.
 
-The wordmark is traced to outlines, so the banner carries the real typeface no
-matter what the viewer has installed. The mascot is embedded as base64 so the
-file is self-contained: no external request, no proxy, no broken image.
+Two hard constraints found by watching the file on GitHub, not locally:
 
-Every element's base style is its finished state and the animation runs from a
-backwards fill, so a renderer that ignores CSS animation (a proxy, a converter,
-a screenshot tool) still shows the complete banner.
+1. An SVG served as a repo image is sandboxed (CSP `default-src 'none'`), so an
+   embedded image, even a base64 one, is blocked. The banner is therefore type
+   and rules only.
+2. CSS animations inside an SVG used as an image did not advance on GitHub, so
+   every element whose fill or opacity came from a stylesheet stayed invisible.
+   The animation is SMIL instead, and every colour is an attribute.
+
+The wordmark is traced to outlines, so it carries the real typeface no matter
+what the viewer has installed. Animate elements start from their finished state
+and SMIL moves them backwards, so a renderer without SMIL shows the whole banner.
 
     uv run --with fonttools --with brotli python tools/make-hero.py
 """
 
-import base64
 from pathlib import Path
 
 from fontTools.pens.svgPathPen import SVGPathPen
@@ -20,12 +24,13 @@ from fontTools.varLib.instancer import instantiateVariableFont
 
 ROOT = Path(__file__).resolve().parent.parent
 FONT = ROOT / "src" / "assets" / "fonts" / "InterVariable.woff2"
-ART = ROOT / "src" / "assets" / "mascot" / "aikowelcome.webp"
 OUT = ROOT / "assets"
 
 WORD = "KURO"
 SIZE = 104
 TRACKING = 0.14  # em, from the identity
+
+FACTS = ["WINDOWS 10 AND 11", "TAURI 2 · RUST · REACT 19", "MIT LICENCE"]
 
 
 def load_glyphs():
@@ -46,17 +51,6 @@ def load_glyphs():
     return glyphs, upem
 
 
-def word_paths(glyphs, upem, x0, baseline):
-    scale = SIZE / upem
-    spacing = SIZE * TRACKING
-    out = []
-    x = x0
-    for glyph in glyphs:
-        out.append({"d": glyph["path"], "x": round(x, 2), "scale": scale, "baseline": baseline})
-        x += glyph["advance"] * scale + spacing
-    return out, x - spacing
-
-
 def build(theme):
     if theme == "dark":
         page, text, muted = "#0B0D12", "#E8EAF0", "#A8B0C4"
@@ -66,69 +60,60 @@ def build(theme):
         rule, sheen, glow, line = "#B8873C", "#C9A253", "#8A5F1F", "#12141A"
 
     glyphs, upem = load_glyphs()
-    letters, width = word_paths(glyphs, upem, 96, 178)
+    scale = SIZE / upem
+    spacing = SIZE * TRACKING
 
-    animated = "".join(
-        f'<path class="letter" style="animation-delay:{200 + i * 70}ms" '
-        f'transform="translate({g["x"]} {g["baseline"]}) scale({g["scale"]} -{g["scale"]})" '
-        f'd="{g["d"]}"/>'
-        for i, g in enumerate(letters)
-    )
-    plain = "".join(
-        f'<path transform="translate({g["x"]} {g["baseline"]}) '
-        f'scale({g["scale"]} -{g["scale"]})" d="{g["d"]}"/>'
-        for g in letters
-    )
+    letters = []
+    x = 96
+    for index, glyph in enumerate(glyphs):
+        begin = round(0.2 + index * 0.07, 3)
+        letters.append(
+            f'''<g transform="translate({round(x, 2)} 178) scale({round(scale, 5)} -{round(scale, 5)})">
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0 14;0 0" dur="0.5s" begin="{begin}s" fill="freeze"/>
+      <path d="{glyph["path"]}" fill="{text}" opacity="1">
+        <animate attributeName="opacity" values="0;1" dur="0.5s" begin="{begin}s" fill="freeze"/>
+      </path>
+    </g>
+  </g>'''
+        )
+        x += glyph["advance"] * scale + spacing
+    word_width = x - spacing - 96
 
-    art = base64.b64encode(ART.read_bytes()).decode("ascii")
+    facts = "".join(
+        f'<text x="1104" y="{150 + index * 28}" text-anchor="end" font-family="Inter, Segoe UI, system-ui, sans-serif" '
+        f'font-size="12" letter-spacing="0.08em" fill="{muted}">{fact}</text>'
+        for index, fact in enumerate(FACTS)
+    )
 
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320" role="img" aria-labelledby="t">
   <title id="t">KURO, a third-party front door for Roblox</title>
-  <style>
-    .rule {{ animation: draw 620ms cubic-bezier(.2,.8,.2,1) 80ms backwards; transform-origin: 96px 88px; }}
-    .divider {{ animation: fade 500ms cubic-bezier(.2,.8,.2,1) 700ms backwards; }}
-    .letter {{ fill: {text}; animation: rise 520ms cubic-bezier(.2,.8,.2,1) backwards; }}
-    .sub, .meta {{ fill: {muted}; animation: fade 560ms cubic-bezier(.2,.8,.2,1) backwards; }}
-    .sub {{ animation-delay: 760ms; }}
-    .meta {{ animation-delay: 900ms; }}
-    .art {{ animation: arrive 760ms cubic-bezier(.2,.8,.2,1) 420ms backwards; }}
-    .sweep {{ animation: sweep 1100ms cubic-bezier(.4,0,.2,1) 1250ms backwards; }}
-    @keyframes draw {{ from {{ transform: scaleX(0); }} to {{ transform: scaleX(1); }} }}
-    @keyframes rise {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
-    @keyframes fade {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}
-    @keyframes arrive {{ from {{ opacity: 0; transform: translateX(18px); }} to {{ opacity: 1; transform: translateX(0); }} }}
-    @keyframes sweep {{ from {{ transform: translateX(0); }} to {{ transform: translateX(1800px); }} }}
-    @media (prefers-reduced-motion: reduce) {{
-      .rule, .divider, .letter, .sub, .meta, .art, .sweep {{ animation: none; }}
-    }}
-  </style>
 
   <rect width="1200" height="320" fill="{page}"/>
 
-  <rect class="rule" x="96" y="87" width="{round(width * 0.42, 1)}" height="2" fill="{rule}"/>
+  <rect x="96" y="87" height="2" fill="{rule}">
+    <animate attributeName="width" values="0;{round(word_width * 0.42, 1)}" dur="0.62s" begin="0.08s" fill="freeze"/>
+  </rect>
 
-  <g>{animated}</g>
+  {chr(10).join(letters)}
 
   <g mask="url(#word)">
-    <rect class="sweep" x="-400" y="60" width="320" height="140" fill="url(#sheen)"/>
+    <rect x="-400" y="40" width="320" height="170" fill="url(#sheen)">
+      <animateTransform attributeName="transform" type="translate" values="0 0;1800 0" dur="1.1s" begin="1.25s" fill="freeze"/>
+    </rect>
   </g>
 
-  <text class="sub" x="96" y="232" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="21">A third-party front door for Roblox.</text>
-  <text class="meta" x="96" y="266" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="14">Mem&#39;s Kuro Launcher</text>
+  <text x="96" y="232" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="21" fill="{muted}">A third-party front door for Roblox.<animate attributeName="opacity" values="0;1" dur="0.55s" begin="0.75s" fill="freeze"/></text>
+  <text x="96" y="266" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="14" fill="{muted}">Mem&#39;s Kuro Launcher<animate attributeName="opacity" values="0;1" dur="0.55s" begin="0.9s" fill="freeze"/></text>
 
-  <rect class="divider" x="812" y="70" width="1" height="180" fill="{line}" fill-opacity="0.10"/>
+  <rect x="880" y="108" width="1" height="130" fill="{line}" fill-opacity="0.10"/>
 
-  <circle cx="1002" cy="168" r="176" fill="url(#halo)"/>
-
-  <image class="art" x="898" y="8" width="207" height="310" href="data:image/webp;base64,{art}"/>
+  {facts}
 
   <defs>
-    <mask id="word"><g fill="#fff">{plain}</g></mask>
-    <radialGradient id="halo">
-      <stop offset="0" stop-color="{sheen}" stop-opacity="0.13"/>
-      <stop offset="0.65" stop-color="{sheen}" stop-opacity="0.04"/>
-      <stop offset="1" stop-color="{sheen}" stop-opacity="0"/>
-    </radialGradient>
+    <mask id="word">
+      <g transform="translate(0 0)">{''.join(f'<path transform="translate({round(96 + sum(g["advance"] * scale + spacing for g in glyphs[:i]) if i else 96, 2)} 178) scale({round(scale, 5)} -{round(scale, 5)})" d="{g["path"]}"/>' for i, g in enumerate(glyphs))}</g>
+    </mask>
     <linearGradient id="sheen" x1="0" x2="1">
       <stop offset="0" stop-color="{sheen}" stop-opacity="0"/>
       <stop offset="0.45" stop-color="{sheen}" stop-opacity="0.5"/>

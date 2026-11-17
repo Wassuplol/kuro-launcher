@@ -123,8 +123,13 @@ Enforced as each layer lands:
 ## The name
 
 Kuro is black in Japanese. Aiko Kuro is the character in the corner: white hair,
-gold eyes, charcoal suit, and the same calm register as the app's copy. She is
-drawn once and reused, never animated on a loop.
+gold eyes, charcoal suit, and the same calm register as the app's copy. She
+appears on empty states and in the intro, never on a button, never beside a
+failure, and never animated on a loop.
+
+<p align="center">
+  <img src="src/assets/mascot/atrestaiko.webp" alt="Aiko Kuro, seated with a tablet" height="260">
+</p>
 
 ## Licence
 
