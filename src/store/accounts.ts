@@ -17,6 +17,7 @@ type AccountsState = {
 
   load: () => Promise<void>;
   add: (cookie: string) => Promise<boolean>;
+  finishQuickLogin: (code: string, privateKey: string) => Promise<boolean>;
   check: () => Promise<void>;
   forget: (userId: number) => Promise<void>;
   makeDefault: (userId: number) => Promise<void>;
@@ -51,6 +52,21 @@ export const useAccounts = create<AccountsState>()((set) => ({
     } catch (value) {
       set({ adding: false });
       announce(value, "That session was not added.");
+      return false;
+    }
+  },
+
+  // Quick Login ends here: the exchange, the verification and the seal all
+  // happen inside one Rust call, so this only stores the answer it gets back.
+  finishQuickLogin: async (code, privateKey) => {
+    try {
+      const accounts = await api.quickLoginFinish(code, privateKey);
+      set({ accounts });
+      const added = accounts.find((account) => account.userId > 0);
+      toast.success(added ? `Signed in as ${added.display}.` : "Signed in.");
+      return true;
+    } catch (value) {
+      announce(value, "The approval could not be turned into a session.");
       return false;
     }
   },

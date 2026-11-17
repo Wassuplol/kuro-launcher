@@ -89,7 +89,7 @@ fn prefix_of(path: &Path) -> String {
 /// The full image path of one process, when this account is allowed to ask.
 /// Processes owned by another user are simply skipped: they cannot be Roblox
 /// running as this user, which is the only case that matters here.
-fn process_image(pid: u32) -> Option<String> {
+pub fn process_image(pid: u32) -> Option<String> {
     // SAFETY: the handle is closed below on every path out.
     let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
 

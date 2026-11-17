@@ -43,6 +43,17 @@ pub struct Supply {
     pub pinned: Option<String>,
 }
 
+/// What the launch pipeline remembers. Nothing here is inferred: both switches
+/// change what happens on the machine, so both are asked for.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Launching {
+    /// Hold `ROBLOX_singletonMutex` for the life of the app, so a second client
+    /// can start beside the first. Off by default: it changes how the machine
+    /// behaves for every Roblox program, not only this one.
+    pub multi_instance: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -50,6 +61,7 @@ pub struct Settings {
     pub identity: Identity,
     pub intro: Intro,
     pub supply: Supply,
+    pub launch: Launching,
     pub advanced: bool,
 }
 
@@ -60,6 +72,7 @@ impl Default for Settings {
             identity: Identity::default(),
             intro: Intro::default(),
             supply: Supply::default(),
+            launch: Launching::default(),
             advanced: false,
         }
     }

@@ -8,6 +8,7 @@
 //! Everything is written through a temporary file and a rename, so a crash in
 //! the middle of adding an account cannot leave a half-written store behind.
 
+pub mod quicklogin;
 pub mod vault;
 
 use std::path::{Path, PathBuf};
@@ -304,8 +305,15 @@ pub fn whoami(cookie: &str) -> Result<WhoAmI, LaunchError> {
 /// Adds or refreshes one account from a pasted cookie.
 pub fn import(root: &Path, raw_cookie: &str) -> Result<Store, LaunchError> {
     let cookie = normalize_cookie(raw_cookie)?;
-    let who = whoami(&cookie)?;
-    let sealed = vault::seal(&cookie)?;
+    store_session(root, &cookie)
+}
+
+/// Adds or refreshes one account from a cookie that came from Roblox itself,
+/// which is the Quick Login path. The value is already exact, so it is verified
+/// and stored without the paste normaliser.
+pub fn store_session(root: &Path, cookie: &str) -> Result<Store, LaunchError> {
+    let who = whoami(cookie)?;
+    let sealed = vault::seal(cookie)?;
 
     let mut store = load(root)?;
     store.accounts.retain(|account| account.user_id != who.id);
@@ -404,6 +412,22 @@ pub fn set_default(root: &Path, user_id: u64) -> Result<Store, LaunchError> {
         ));
     }
     store.default = Some(user_id);
+    save(root, &store)?;
+    Ok(store)
+}
+
+/// Records that an account was the one a launch used, so "continue as" has an
+/// answer. Best effort: a launch that worked is not undone by a failed write.
+pub fn mark_used(root: &Path, user_id: u64) -> Result<Store, LaunchError> {
+    let mut store = load(root)?;
+    if !store
+        .accounts
+        .iter()
+        .any(|account| account.user_id == user_id)
+    {
+        return Ok(store);
+    }
+    store.last_used = Some(user_id);
     save(root, &store)?;
     Ok(store)
 }

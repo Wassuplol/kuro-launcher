@@ -1,5 +1,7 @@
 pub mod error;
+pub mod http;
 pub mod identity;
+pub mod launch;
 pub mod settings;
 pub mod supply;
 
@@ -24,6 +26,9 @@ pub struct AppState {
     pub data_root: PathBuf,
     pub settings: Mutex<Settings>,
     pub settings_error: Option<LaunchError>,
+    /// Held for the life of the app while multi-instance is on. Dropping it
+    /// hands the lock back to Roblox, which is the whole mechanism.
+    pub singleton: Mutex<Option<launch::spawn::Singleton>>,
     pub supply: SupplyState,
     /// Set once the page has taken control of the window. Until then the window
     /// stays hidden, so nothing full-size is ever painted before the opening.
@@ -304,6 +309,310 @@ fn accounts_default(
 ) -> Result<Vec<identity::AccountView>, LaunchError> {
     let store = identity::set_default(&state.data_root, user_id)?;
     Ok(identity::views(&store))
+}
+
+/// Starts a Quick Login attempt: Roblox's own cross-device sign-in, so nothing
+/// is typed into this app and nothing is pasted out of a browser.
+#[tauri::command]
+async fn quicklogin_start() -> Result<identity::quicklogin::Attempt, LaunchError> {
+    tauri::async_runtime::spawn_blocking(identity::quicklogin::create)
+        .await
+        .map_err(|e| worker_failed(format!("The sign-in code was not created: {e}")))?
+}
+
+/// One poll of an attempt. The page owns the timer, so an attempt cannot be
+/// left running in Rust after the panel closes.
+#[tauri::command]
+async fn quicklogin_poll(
+    code: String,
+    private_key: String,
+) -> Result<identity::quicklogin::Poll, LaunchError> {
+    tauri::async_runtime::spawn_blocking(move || identity::quicklogin::poll(&code, &private_key))
+        .await
+        .map_err(|e| worker_failed(format!("The sign-in code was not checked: {e}")))?
+}
+
+/// Frees a pending approval the person backed out of.
+#[tauri::command]
+async fn quicklogin_cancel(code: String, private_key: String) -> Result<(), LaunchError> {
+    tauri::async_runtime::spawn_blocking(move || identity::quicklogin::cancel(&code, &private_key))
+        .await
+        .map_err(|e| worker_failed(format!("The sign-in code was not cancelled: {e}")))?
+}
+
+/// Exchanges an approved code for a session and stores it sealed. The cookie is
+/// created, verified and sealed inside this one call; it never reaches the page.
+#[tauri::command]
+async fn quicklogin_finish(
+    state: State<'_, AppState>,
+    code: String,
+    private_key: String,
+) -> Result<Vec<identity::AccountView>, LaunchError> {
+    let root = state.data_root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let cookie = identity::quicklogin::exchange(&code, &private_key)?;
+        let store = identity::store_session(&root, &cookie)?;
+        Ok(identity::views(&store))
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The approval was not stored: {e}")))?
+}
+
+/// Opens a Roblox page in the default browser.
+///
+/// The URL comes from the renderer, so it is checked against Roblox's own hosts
+/// first: a command that opens anything would be a way to launch a local file or
+/// another program from the page. Discovery and game pages need the same door
+/// later, which is why this is a general helper and not a Quick Login one.
+#[tauri::command]
+fn open_site(url: String) -> Result<(), LaunchError> {
+    const HOSTS: [&str; 4] = [
+        "https://www.roblox.com/",
+        "https://web.roblox.com/",
+        "https://apis.roblox.com/",
+        "https://auth.roblox.com/",
+    ];
+
+    if !HOSTS.iter().any(|host| url.starts_with(host)) {
+        return Err(LaunchError::new(
+            FailureCode::NotFound,
+            "That is not a Roblox address, so it was not opened.",
+        ));
+    }
+
+    std::process::Command::new("explorer")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| {
+            LaunchError::new(
+                FailureCode::Internal,
+                format!("Your browser could not be opened: {e}"),
+            )
+        })
+}
+
+/// Reads a destination without starting anything: what mode it is, which place
+/// it names, and which client would run it.
+#[tauri::command]
+async fn launch_read(
+    state: State<'_, AppState>,
+    target: String,
+) -> Result<launch::Reading, LaunchError> {
+    let pinned = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.supply.pinned.clone()
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let installed = supply::discover_all(&pinned, None)?;
+        launch::reading(&target, &installed, &pinned)
+    })
+    .await
+    .map_err(|e| worker_failed(format!("That destination could not be read: {e}")))?
+}
+
+/// One launch: parse, preflight, mint a ticket, build the string, spawn.
+///
+/// The ticket is minted here and used once. It is never returned to the page,
+/// never stored, and never reused, because it is single use by design.
+#[tauri::command]
+async fn launch_start(
+    state: State<'_, AppState>,
+    target: String,
+    user_id: Option<u64>,
+) -> Result<launch::Launched, LaunchError> {
+    let root = state.data_root.clone();
+    let (pinned, multi) = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        (
+            settings.supply.pinned.clone(),
+            settings.launch.multi_instance,
+        )
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let installed = supply::discover_all(&pinned, None)?;
+        let prepared = launch::prepare(&target, &installed, &pinned)?;
+
+        let store = identity::load(&root)?;
+        let chosen = user_id
+            .or(store.default)
+            .or_else(|| store.accounts.first().map(|account| account.user_id));
+
+        let Some(chosen) = chosen else {
+            return Err(LaunchError::new(
+                FailureCode::SessionExpired,
+                "There is no account on this machine to launch as.",
+            )
+            .with_action("Add an account"));
+        };
+
+        let account = store
+            .accounts
+            .iter()
+            .find(|account| account.user_id == chosen)
+            .ok_or_else(|| {
+                LaunchError::new(
+                    FailureCode::NotFound,
+                    "That account is not saved on this machine.",
+                )
+                .with_action("Add the account again")
+            })?;
+        let display = account.display.clone();
+
+        // Said before a ticket is minted, so a machine that cannot run a second
+        // client is told that instead of being handed a launch that focuses the
+        // window it already has.
+        if !multi && launch::spawn::player_running() {
+            return Err(LaunchError::new(
+                FailureCode::AlreadyRunning,
+                "Roblox is already running. The client focuses the window it has instead of \
+                 starting a second one.",
+            )
+            .with_action("Allow more than one game"));
+        }
+
+        let cookie = identity::cookie_for(&root, chosen)?;
+
+        let key = format!("{chosen}|{target}");
+        let reused = launch::begin(&key)?;
+
+        let mode = prepared.mode;
+        let detail = match mode {
+            launch::Mode::Normal => format!(
+                "Opened place {} in any server as {display}.",
+                prepared.place.unwrap_or_default()
+            ),
+            launch::Mode::Server => format!(
+                "Opened one server of place {} as {display}.",
+                prepared.place.unwrap_or_default()
+            ),
+            launch::Mode::Private => format!(
+                "Opened the private server for place {} as {display}.",
+                prepared.place.unwrap_or_default()
+            ),
+            launch::Mode::Follow => format!("Following a friend as {display}."),
+        };
+
+        if reused {
+            return Ok(launch::Launched {
+                mode,
+                mode_label: prepared.mode_label,
+                place: prepared.place,
+                server: prepared.server,
+                account: display,
+                client: prepared.client,
+                version: prepared.version,
+                reused: true,
+                detail: "That launch is already starting, so no second client was opened."
+                    .to_string(),
+            });
+        }
+
+        let outcome = (|| {
+            let ticket = launch::ticket::mint(&cookie)?;
+            let uri = launch::launch_uri(&ticket, &prepared.launcher_url, launch::now_ms());
+            launch::spawn::spawn(std::path::Path::new(&prepared.path), &uri)
+        })();
+
+        match outcome {
+            Ok(_pid) => {
+                launch::settle(&key);
+                // Recorded so "continue as" has an answer next time. A failure
+                // here must not turn a running client into an error.
+                let _ = identity::mark_used(&root, chosen);
+                Ok(launch::Launched {
+                    mode,
+                    mode_label: prepared.mode_label,
+                    place: prepared.place,
+                    server: prepared.server,
+                    account: display,
+                    client: prepared.client,
+                    version: prepared.version,
+                    reused: false,
+                    detail,
+                })
+            }
+            Err(error) => {
+                launch::release();
+                Err(error)
+            }
+        }
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The launch did not finish: {e}")))?
+}
+
+/// Turns the multi-instance lock on or off and remembers the answer.
+///
+/// Off by default, because holding this mutex changes how every Roblox program
+/// on the machine behaves, and that is the person's decision to make.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiInstance {
+    pub settings: Settings,
+    /// False when another program already held the mutex, which means the
+    /// switch applies from its next start rather than from now.
+    pub created: bool,
+}
+
+#[tauri::command]
+fn launch_multi_instance(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<MultiInstance, LaunchError> {
+    let mut slot = state.singleton.lock().map_err(|_| poisoned())?;
+    let mut created = true;
+    if enabled {
+        if slot.is_none() {
+            let held = launch::spawn::hold_singleton()?;
+            created = held.created;
+            *slot = Some(held);
+        }
+    } else {
+        // Dropping the handle releases the lock.
+        *slot = None;
+    }
+    drop(slot);
+
+    let next = {
+        let mut settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.launch.multi_instance = enabled;
+        settings::normalise(settings.clone())
+    };
+    settings::save(&state.data_root, &next)?;
+
+    let mut guard = state.settings.lock().map_err(|_| poisoned())?;
+    *guard = next.clone();
+    Ok(MultiInstance {
+        settings: next,
+        created,
+    })
+}
+
+/// What the launch panel needs to know before anything is pressed.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchState {
+    /// A game client is running right now.
+    pub player_running: bool,
+    pub multi_instance: bool,
+}
+
+#[tauri::command]
+fn launch_state(state: State<'_, AppState>) -> Result<LaunchState, LaunchError> {
+    let multi_instance = state
+        .settings
+        .lock()
+        .map_err(|_| poisoned())?
+        .launch
+        .multi_instance;
+
+    Ok(LaunchState {
+        player_running: launch::spawn::player_running(),
+        multi_instance,
+    })
 }
 
 /// Opens the Roblox versions folder, so a person can see what the screen is
@@ -627,10 +936,19 @@ pub fn run() {
                 });
             }
 
+            // The switch may already be on from a previous run, and a launch
+            // right after start must find the mutex already held.
+            let singleton = if loaded.launch.multi_instance {
+                launch::spawn::hold_singleton().ok()
+            } else {
+                None
+            };
+
             app.manage(AppState {
                 data_root: root,
                 settings: Mutex::new(loaded),
                 settings_error,
+                singleton: Mutex::new(singleton),
                 supply: SupplyState::default(),
                 opened,
             });
@@ -643,11 +961,20 @@ pub fn run() {
             settings_reset,
             open_data_root,
             open_versions_root,
+            open_site,
             accounts_list,
             accounts_import,
             accounts_check,
             accounts_remove,
             accounts_default,
+            quicklogin_start,
+            quicklogin_poll,
+            quicklogin_cancel,
+            quicklogin_finish,
+            launch_read,
+            launch_start,
+            launch_multi_instance,
+            launch_state,
             window_open,
             window_grow,
             supply_snapshot,

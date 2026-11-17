@@ -15,6 +15,8 @@ export type Settings = {
   schema: number;
   identity: Identity;
   intro: { instantStart: boolean };
+  supply: { pinned: string | null };
+  launch: { multiInstance: boolean };
   advanced: boolean;
 };
 
@@ -136,4 +138,67 @@ export type AccountView = {
   checkedAt: number;
   isDefault: boolean;
   isLastUsed: boolean;
+};
+
+/** Where a Quick Login attempt has got to. Roblox's own names, mapped once. */
+export type QuickLoginState =
+  | "created"
+  | "user_linked"
+  | "validated"
+  | "cancelled"
+  | "timed_out"
+  | "unknown";
+
+export type QuickLoginAttempt = {
+  code: string;
+  privateKey: string;
+  expiresAt: string;
+  expiresIn: number;
+  /** A data URL, or empty when the picture could not be fetched. */
+  qr: string;
+};
+
+export type QuickLoginPoll = {
+  state: QuickLoginState;
+  accountName: string | null;
+  accountPicture: string | null;
+  expiresAt: string | null;
+};
+
+/** Where a launch is pointed. Roblox's five destinations, named once. */
+export type LaunchMode = "normal" | "server" | "private" | "follow";
+
+export type LaunchReading = {
+  mode: LaunchMode;
+  modeLabel: string;
+  place: number | null;
+  server: string | null;
+  client: string | null;
+  version: string | null;
+  summary: string;
+};
+
+export type Launched = {
+  mode: LaunchMode;
+  modeLabel: string;
+  place: number | null;
+  server: string | null;
+  account: string;
+  client: string;
+  version: string | null;
+  /** True when the same request was answered moments ago and nothing spawned. */
+  reused: boolean;
+  detail: string;
+};
+
+export type LaunchState = {
+  /** A game client is running right now. */
+  playerRunning: boolean;
+  multiInstance: boolean;
+};
+
+export type MultiInstance = {
+  settings: Settings;
+  /** False when another program already held the lock, so it applies next start. */
+  created: boolean;
 };

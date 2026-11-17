@@ -15,6 +15,7 @@ type ShellState = {
   settingsOpen: boolean;
   versionsOpen: boolean;
   accountsOpen: boolean;
+  launchOpen: boolean;
   onboardingOpen: boolean;
 
   boot: () => Promise<void>;
@@ -27,8 +28,11 @@ type ShellState = {
   closeVersions: () => void;
   openAccounts: () => void;
   closeAccounts: () => void;
+  openLaunch: () => void;
+  closeLaunch: () => void;
   openOnboarding: () => void;
   closeOnboarding: () => void;
+  setMultiInstance: (enabled: boolean) => Promise<void>;
   openDataRoot: () => Promise<void>;
   resetSettings: () => Promise<void>;
   update: (mutate: (draft: Settings) => void) => Promise<void>;
@@ -44,6 +48,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   settingsOpen: false,
   versionsOpen: false,
   accountsOpen: false,
+  launchOpen: false,
   onboardingOpen: false,
 
   boot: async () => {
@@ -67,21 +72,72 @@ export const useShell = create<ShellState>()((set, get) => ({
 
   go: (page) => {
     reflect(page);
-    set({ page, paletteOpen: false, settingsOpen: false, versionsOpen: false, accountsOpen: false });
+    set({
+      page,
+      paletteOpen: false,
+      settingsOpen: false,
+      versionsOpen: false,
+      accountsOpen: false,
+      launchOpen: false,
+    });
   },
 
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
-  openSettings: () => set({ settingsOpen: true, versionsOpen: false, accountsOpen: false }),
+  openSettings: () =>
+    set({ settingsOpen: true, versionsOpen: false, accountsOpen: false, launchOpen: false }),
   closeSettings: () => set({ settingsOpen: false }),
   openVersions: () =>
-    set({ versionsOpen: true, settingsOpen: false, paletteOpen: false, accountsOpen: false }),
+    set({
+      versionsOpen: true,
+      settingsOpen: false,
+      paletteOpen: false,
+      accountsOpen: false,
+      launchOpen: false,
+    }),
   closeVersions: () => set({ versionsOpen: false }),
   openAccounts: () =>
-    set({ accountsOpen: true, settingsOpen: false, paletteOpen: false, versionsOpen: false }),
+    set({
+      accountsOpen: true,
+      settingsOpen: false,
+      paletteOpen: false,
+      versionsOpen: false,
+      launchOpen: false,
+    }),
   closeAccounts: () => set({ accountsOpen: false }),
+  openLaunch: () =>
+    set({
+      launchOpen: true,
+      settingsOpen: false,
+      paletteOpen: false,
+      versionsOpen: false,
+      accountsOpen: false,
+    }),
+  closeLaunch: () => set({ launchOpen: false }),
   openOnboarding: () => set({ onboardingOpen: true, settingsOpen: false, paletteOpen: false }),
   closeOnboarding: () => set({ onboardingOpen: false }),
+
+  // The switch is not only a stored value: turning it on takes a named mutex,
+  // which happens in Rust and can fail. Settings follow the result rather than
+  // leading it, so the toggle cannot show a state the machine is not in.
+  setMultiInstance: async (enabled) => {
+    const current = get().settings;
+    try {
+      const answer = await api.launchMultiInstance(enabled);
+      set({ settings: answer.settings });
+      if (enabled && !answer.created) {
+        toast.message("Another Roblox program already holds that lock.", {
+          description: "The switch is on. It takes effect from that program's next start.",
+        });
+      }
+    } catch (value) {
+      set({ settings: current });
+      const failure = value instanceof CommandError ? value : null;
+      toast.error(failure?.message ?? "The multi-instance switch did not change.", {
+        description: failureDetail(failure),
+      });
+    }
+  },
 
   openDataRoot: async () => {
     try {

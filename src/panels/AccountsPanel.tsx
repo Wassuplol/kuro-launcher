@@ -2,6 +2,7 @@ import { Check, KeyRound, ShieldCheck, Star, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge, PanelFrame, Row, Section } from "../components/Panel";
+import { QuickLogin } from "../components/QuickLogin";
 import { cn } from "../lib/cn";
 import { day } from "../lib/format";
 import type { AccountView } from "../lib/types";
@@ -51,13 +52,16 @@ function AddAccount() {
 
   return (
     <Section title="Add an account">
-      <div className="px-3.5 py-3">
+      <QuickLogin />
+
+      <div className="border-t border-white/6 px-3.5 py-3">
         <label htmlFor="cookie" className="text-[13px] text-body">
-          Paste your <span className="num">.ROBLOSECURITY</span> value
+          Or paste your <span className="num">.ROBLOSECURITY</span> value
         </label>
         <p className="mt-1 text-[11px] leading-[1.55] text-muted">
-          Roblox's site keeps it in your browser's cookies. It is checked against Roblox,
-          sealed with Windows, and never shown again. It never leaves this machine.
+          The fallback for when you cannot reach a device you are signed in on. It is checked
+          against Roblox, sealed with Windows, and never shown again. It never leaves this
+          machine.
         </p>
 
         <div className="mt-2.5 flex items-center gap-1.5">

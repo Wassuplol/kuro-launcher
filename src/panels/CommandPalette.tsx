@@ -1,20 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Command } from "cmdk";
-import {
-  ArrowDown,
-  ArrowUp,
-  CornerDownLeft,
-  FolderOpen,
-  Home,
-  Library,
-  PackageCheck,
-  UserRound,
-  RotateCcw,
-  Search,
-  Settings,
-  SlidersHorizontal,
-  Users,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, Home, Library, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 
 import { PAGE_LABEL, PAGES } from "../app/router";
@@ -32,6 +18,7 @@ export function CommandPalette() {
   const openSettings = useShell((state) => state.openSettings);
   const openVersions = useShell((state) => state.openVersions);
   const openAccounts = useShell((state) => state.openAccounts);
+  const openLaunch = useShell((state) => state.openLaunch);
   const openOnboarding = useShell((state) => state.openOnboarding);
   const openDataRoot = useShell((state) => state.openDataRoot);
   const settings = useShell((state) => state.settings);
@@ -95,6 +82,17 @@ export function CommandPalette() {
               >
                 <Settings size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
                 <span>Open settings</span>
+              </Command.Item>
+
+              <Command.Item
+                value="launch play join game place server"
+                onSelect={() => {
+                  close();
+                  openLaunch();
+                }}
+              >
+                <Play size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
+                <span>Launch a place</span>
               </Command.Item>
 
               <Command.Item

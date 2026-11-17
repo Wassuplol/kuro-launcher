@@ -4,8 +4,14 @@ import type {
   AppInfo,
   ClientKind,
   InstallMethod,
+  Launched,
+  LaunchReading,
+  LaunchState,
+  MultiInstance,
   PrunePlan,
   PruneResult,
+  QuickLoginAttempt,
+  QuickLoginPoll,
   Settings,
   SupplySnapshot,
   VerifyReport,
@@ -97,6 +103,27 @@ export const api = {
   accountsCheck: () => call<AccountView[]>("accounts_check"),
   accountsRemove: (userId: number) => call<AccountView[]>("accounts_remove", { userId }),
   accountsDefault: (userId: number) => call<AccountView[]>("accounts_default", { userId }),
+
+  /** Roblox's own cross-device sign-in: a code, a QR, a poll, an exchange. */
+  quickLoginStart: () => call<QuickLoginAttempt>("quicklogin_start"),
+  quickLoginPoll: (code: string, privateKey: string) =>
+    call<QuickLoginPoll>("quicklogin_poll", { code, privateKey }),
+  quickLoginCancel: (code: string, privateKey: string) =>
+    call<void>("quicklogin_cancel", { code, privateKey }),
+  /** Comes back as accounts only: the cookie is sealed before this resolves. */
+  quickLoginFinish: (code: string, privateKey: string) =>
+    call<AccountView[]>("quicklogin_finish", { code, privateKey }),
+
+  /** Opens a Roblox page in the default browser. Anything else is refused. */
+  openSite: (url: string) => call<void>("open_site", { url }),
+
+  /** Reads a destination without starting anything. */
+  launchRead: (target: string) => call<LaunchReading>("launch_read", { target }),
+  launchStart: (target: string, userId: number | null) =>
+    call<Launched>("launch_start", { target, userId }),
+  launchMultiInstance: (enabled: boolean) =>
+    call<MultiInstance>("launch_multi_instance", { enabled }),
+  launchState: () => call<LaunchState>("launch_state"),
 
   /** Shrinks and shows the window at the opening scene's size. */
   windowOpen: (width: number, height: number) =>
