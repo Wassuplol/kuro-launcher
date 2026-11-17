@@ -19,6 +19,7 @@ the bottom with the milestone that brings them.
 | sonner | toasts for failures that are not worth a screen |
 | @radix-ui/react-tooltip | rail labels on hover |
 | @radix-ui/react-switch | the one accessible toggle |
+| animejs | SVG only: draws a rail icon's strokes when its page becomes live |
 | react-hotkeys-hook | the keyboard map: Ctrl 1 to 4, Ctrl K, / and Escape |
 | clsx, tailwind-merge | className composition without duplicate utilities |
 
@@ -40,7 +41,6 @@ the bottom with the milestone that brings them.
 | @tanstack/react-virtual | M6, lists above 100 rows |
 | react-hook-form, zod | M3, the account import form |
 | fuse.js | M6, local filtering of cached results |
-| anime.js | M7, SVG presence rings |
 | lottie-react | M1 follow-up, once an authored Lottie file exists |
 | dayjs | M7, "last seen 2h ago" |
 | @radix-ui/react-dialog, dropdown-menu, popover, tabs | the panel that first needs each one |

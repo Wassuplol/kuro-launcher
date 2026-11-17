@@ -1,7 +1,10 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import type { LucideIcon } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 import { cn } from "../lib/cn";
+import { revealIcon } from "../lib/revealIcon";
+import { useReducedMotion } from "../lib/useReducedMotion";
 
 type Props = {
   label: string;
@@ -12,6 +15,15 @@ type Props = {
 };
 
 export function RailItem({ label, shortcut, icon: Icon, active, onClick }: Props) {
+  const iconRef = useRef<SVGSVGElement>(null);
+  const reduced = useReducedMotion();
+
+  // anime.js draws the icon when its page becomes the live one.
+  useEffect(() => {
+    if (!active || reduced || !iconRef.current) return;
+    revealIcon(iconRef.current);
+  }, [active, reduced]);
+
   return (
     <Tooltip.Root>
       <Tooltip.Trigger asChild>
@@ -31,7 +43,7 @@ export function RailItem({ label, shortcut, icon: Icon, active, onClick }: Props
               className="absolute -left-2 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-full bg-gold"
             />
           ) : null}
-          <Icon size={20} strokeWidth={1.6} />
+          <Icon ref={iconRef} size={20} strokeWidth={1.6} />
         </button>
       </Tooltip.Trigger>
       <Tooltip.Portal>
