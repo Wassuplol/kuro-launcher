@@ -82,7 +82,13 @@ export function CommandPalette() {
             </Command.Group>
 
             <Command.Group heading="App">
-              <Command.Item value="open settings" onSelect={openSettings}>
+              <Command.Item
+                value="open settings"
+                onSelect={() => {
+                  close();
+                  openSettings();
+                }}
+              >
                 <Settings size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
                 <span>Open settings</span>
               </Command.Item>

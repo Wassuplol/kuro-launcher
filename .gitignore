@@ -17,3 +17,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Recorded demo frames, rebuilt by tools/demo.mjs
+demo-frames/
