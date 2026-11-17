@@ -590,23 +590,36 @@ fn bootstrap(job: &mut Job, root: &Path, kind: Kind, upload: &str) -> Result<(),
 
     // Wait for Roblox to put the folder there. The installer decides when it is
     // finished; polling its result is more honest than guessing at its timing.
-    let final_path = root.join(upload);
+    //
+    // Every root is watched, not the one this function was handed. Roblox's
+    // installer chooses its own destination: asked to install on this machine it
+    // wrote to Program Files while the root it was given was the per-user one,
+    // reported success, and this poll sat waiting in the wrong folder until it
+    // timed out. Its own log is what settled it.
     let deadline = Instant::now() + Duration::from_secs(600);
 
     while Instant::now() < deadline {
         if job.stopped() {
             return Err(cancelled());
         }
-        if final_path.join(kind.executable()).is_file() {
+
+        let landed = super::roots().iter().any(|root| {
+            Path::new(&root.path)
+                .join(upload)
+                .join(kind.executable())
+                .is_file()
+        });
+        if landed {
             let _ = fs::remove_dir_all(&work);
             return Ok(());
         }
+
         std::thread::sleep(Duration::from_millis(700));
     }
 
     Err(LaunchError::new(
         FailureCode::Network,
-        "Roblox's installer finished without placing the client, so nothing was installed.",
+        "Roblox's installer finished without placing the client in any versions folder.",
     )
     .with_action("Try the direct install"))
 }
