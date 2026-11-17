@@ -1,0 +1,8 @@
+# pnpm 11 reads settings from this file, not from package.json.
+
+# One advisory is ignored on purpose. picomatch has no patched release, it is a
+# build-time dependency of vite (a devDependency), and nothing from it ships in
+# the launcher binary. See docs/DEPENDENCIES.md.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf

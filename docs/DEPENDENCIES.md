@@ -44,3 +44,11 @@ the bottom with the milestone that brings them.
 | lottie-react | M1 follow-up, once an authored Lottie file exists |
 | dayjs | M7, "last seen 2h ago" |
 | @radix-ui/react-dialog, dropdown-menu, popover, tabs | the panel that first needs each one |
+
+## One ignored advisory
+
+`GHSA-fc5q-39xc-vjpf` (picomatch, high, ReDoS through repeated extglobs) has no
+patched release. It arrives through vite, which is a devDependency, so it runs on
+the build machine and nothing from it ships in the binary. The exception is
+declared in `pnpm-workspace.yaml`, where pnpm 11 reads settings, and it is the
+only one. Everything else still fails the audit at high.
