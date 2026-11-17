@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    name: check and build (windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: audit frontend dependencies
+        run: pnpm audit --audit-level high
+
+      - name: type check
+        run: pnpm exec tsc --noEmit
+
+      - name: rust format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: rust lints
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: dependency policy
+        run: cargo deny --manifest-path src-tauri/Cargo.toml check
+
+      - name: build
+        run: pnpm tauri build --no-bundle
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kuro-launcher-windows-x64
+          path: src-tauri/target/release/kuro-launcher.exe
+          if-no-files-found: error

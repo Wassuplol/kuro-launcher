@@ -1,0 +1,175 @@
+/*
+ * The palette and density from the master prompt, section 7. Gold means action
+ * or live state. Red means destructive. There is no third accent.
+ */
+@theme {
+  --color-page: #0b0d12;
+  --color-panel: #12141a;
+  --color-raised: #1a1d25;
+  --color-body: #e8eaf0;
+  --color-muted: #a8b0c4;
+  --color-gold: #e7c169;
+  --color-deep-gold: #b8873c;
+  --color-success: #8fd9b6;
+  --color-danger: #f3a0a0;
+  --color-danger-fill: #a62f33;
+
+  --font-sans: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --radius-modal: 14px;
+}
+
+:root {
+  color-scheme: dark;
+
+  --page: #0b0d12;
+  --panel: #12141a;
+  --raised: #1a1d25;
+  --body: #e8eaf0;
+  --muted: #a8b0c4;
+  --gold: #e7c169;
+  --deep-gold: #b8873c;
+  --success: #8fd9b6;
+  --danger-text: #f3a0a0;
+  --danger-fill: #a62f33;
+
+  --line: rgb(255 255 255 / 0.08);
+  --line-strong: rgb(255 255 255 / 0.14);
+
+  --rail: 60px;
+  --header: 44px;
+  --row: 40px;
+
+  --micro: 120ms;
+  --enter: 180ms;
+  --settle: 260ms;
+  --ease-kuro: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--page);
+    color: var(--body);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    user-select: none;
+    cursor: default;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+  }
+
+  ::selection {
+    background: rgb(231 193 105 / 0.3);
+    color: var(--body);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #262b35;
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #343a47;
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      transition-duration: 1ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* One transition definition so every control moves at the micro token. */
+  .ui {
+    transition-property: color, background-color, border-color, opacity, transform;
+    transition-duration: var(--micro);
+    transition-timing-function: var(--ease-kuro);
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  /* cmdk renders plain elements with data attributes, so its states live here. */
+  [cmdk-group-heading] {
+    padding: 10px 10px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--body);
+  }
+
+  [cmdk-item] {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: var(--radius-control);
+    color: var(--body);
+    font-size: 13px;
+    cursor: default;
+  }
+
+  [cmdk-item][data-selected="true"] {
+    background: #262b35;
+  }
+
+  [cmdk-item][data-selected="true"] .cmd-icon {
+    color: var(--gold);
+  }
+
+  [cmdk-item][data-disabled="true"] {
+    color: var(--muted);
+    opacity: 0.5;
+  }
+
+  [cmdk-empty] {
+    padding: 18px 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+}
