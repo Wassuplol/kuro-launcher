@@ -56,15 +56,23 @@ the executable and the whole root moves next to the executable instead.
 
 ## Security model
 
-1. Session cookies are sealed with Windows DPAPI, bound to the Windows user, and
-   stored as ciphertext only.
-2. A cookie is only ever sent to `roblox.com`, never to a proxy and never to a
+The target, and what is already true.
+
+True in this build:
+
+- There is no network code at all. Nothing is fetched and nothing is sent.
+- The page never receives a secret. The Rust half owns every privileged action.
+- Settings are written through a temporary file and a rename, so a crash cannot
+  leave a half-written file behind.
+
+Not built yet, and enforced as each layer lands:
+
+1. Session cookies sealed with Windows DPAPI, bound to the Windows user, stored
+   as ciphertext only.
+2. A cookie only ever sent to `roblox.com`, never to a proxy and never to a
    server of ours. There is no server of ours.
-3. The page never receives a cookie, a ticket or a key. The Rust half owns
-   everything privileged.
-4. Logs and diagnostics redact the home path, cookies, tickets and keys.
-5. The updater checks a signature made with this project's own key and refuses
-   anything else.
+3. Logs and diagnostics that redact the home path, cookies, tickets and keys.
+4. An updater that checks a signature made with this project's own key.
 
 ## Licence
 

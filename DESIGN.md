@@ -13,6 +13,9 @@ more effects.
 Dark only. There is no light theme, not even a token stub, because the window sits
 beside a game client that is also dark.
 
+> Reading this as: a desktop launcher shell for someone who plays Roblox, in an
+> instrument-panel visual language, dial ENERGY 2 / RHYTHM 3 / MOTION 2.
+
 ## Dials
 
 **ENERGY 2 / RHYTHM 3 / MOTION 2**
