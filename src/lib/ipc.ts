@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AccountView,
   AppInfo,
   ClientKind,
   InstallMethod,
@@ -89,6 +90,13 @@ export const api = {
   resetSettings: () => call<Settings>("settings_reset"),
   openDataRoot: () => call<void>("open_data_root"),
   openVersionsRoot: () => call<void>("open_versions_root"),
+
+  accountsList: () => call<AccountView[]>("accounts_list"),
+  /** The cookie goes to Rust and stops there; nothing comes back but accounts. */
+  accountsImport: (cookie: string) => call<AccountView[]>("accounts_import", { cookie }),
+  accountsCheck: () => call<AccountView[]>("accounts_check"),
+  accountsRemove: (userId: number) => call<AccountView[]>("accounts_remove", { userId }),
+  accountsDefault: (userId: number) => call<AccountView[]>("accounts_default", { userId }),
 
   /** Shrinks and shows the window at the opening scene's size. */
   windowOpen: (width: number, height: number) =>

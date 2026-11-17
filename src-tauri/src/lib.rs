@@ -1,4 +1,5 @@
 pub mod error;
+pub mod identity;
 pub mod settings;
 pub mod supply;
 
@@ -248,6 +249,61 @@ fn bezier(t: f64) -> f64 {
 fn curve(u: f64, p1: f64, p2: f64) -> f64 {
     let v = 1.0 - u;
     3.0 * v * v * u * p1 + 3.0 * v * u * u * p2 + u * u * u
+}
+
+/// Every account saved on this machine, without a cookie in sight.
+#[tauri::command]
+fn accounts_list(state: State<'_, AppState>) -> Result<Vec<identity::AccountView>, LaunchError> {
+    Ok(identity::views(&identity::load(&state.data_root)?))
+}
+
+/// Adds an account from a pasted cookie, verifying it against Roblox before
+/// anything is stored. The cookie reaches Rust and stops there: it is sealed
+/// into the store and never returned to the page.
+#[tauri::command]
+async fn accounts_import(
+    state: State<'_, AppState>,
+    cookie: String,
+) -> Result<Vec<identity::AccountView>, LaunchError> {
+    let root = state.data_root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = identity::import(&root, &cookie)?;
+        Ok(identity::views(&store))
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The account could not be added: {e}")))?
+}
+
+/// Re-checks every saved session against Roblox and records the answer.
+#[tauri::command]
+async fn accounts_check(
+    state: State<'_, AppState>,
+) -> Result<Vec<identity::AccountView>, LaunchError> {
+    let root = state.data_root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = identity::check_all(&root)?;
+        Ok(identity::views(&store))
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The check did not finish: {e}")))?
+}
+
+#[tauri::command]
+fn accounts_remove(
+    state: State<'_, AppState>,
+    user_id: u64,
+) -> Result<Vec<identity::AccountView>, LaunchError> {
+    let store = identity::remove(&state.data_root, user_id)?;
+    Ok(identity::views(&store))
+}
+
+#[tauri::command]
+fn accounts_default(
+    state: State<'_, AppState>,
+    user_id: u64,
+) -> Result<Vec<identity::AccountView>, LaunchError> {
+    let store = identity::set_default(&state.data_root, user_id)?;
+    Ok(identity::views(&store))
 }
 
 /// Opens the Roblox versions folder, so a person can see what the screen is
@@ -587,6 +643,11 @@ pub fn run() {
             settings_reset,
             open_data_root,
             open_versions_root,
+            accounts_list,
+            accounts_import,
+            accounts_check,
+            accounts_remove,
+            accounts_default,
             window_open,
             window_grow,
             supply_snapshot,

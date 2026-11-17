@@ -14,6 +14,7 @@ type ShellState = {
   paletteOpen: boolean;
   settingsOpen: boolean;
   versionsOpen: boolean;
+  accountsOpen: boolean;
   onboardingOpen: boolean;
 
   boot: () => Promise<void>;
@@ -24,6 +25,8 @@ type ShellState = {
   closeSettings: () => void;
   openVersions: () => void;
   closeVersions: () => void;
+  openAccounts: () => void;
+  closeAccounts: () => void;
   openOnboarding: () => void;
   closeOnboarding: () => void;
   openDataRoot: () => Promise<void>;
@@ -40,6 +43,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   paletteOpen: false,
   settingsOpen: false,
   versionsOpen: false,
+  accountsOpen: false,
   onboardingOpen: false,
 
   boot: async () => {
@@ -63,15 +67,19 @@ export const useShell = create<ShellState>()((set, get) => ({
 
   go: (page) => {
     reflect(page);
-    set({ page, paletteOpen: false, settingsOpen: false, versionsOpen: false });
+    set({ page, paletteOpen: false, settingsOpen: false, versionsOpen: false, accountsOpen: false });
   },
 
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
-  openSettings: () => set({ settingsOpen: true, versionsOpen: false }),
+  openSettings: () => set({ settingsOpen: true, versionsOpen: false, accountsOpen: false }),
   closeSettings: () => set({ settingsOpen: false }),
-  openVersions: () => set({ versionsOpen: true, settingsOpen: false, paletteOpen: false }),
+  openVersions: () =>
+    set({ versionsOpen: true, settingsOpen: false, paletteOpen: false, accountsOpen: false }),
   closeVersions: () => set({ versionsOpen: false }),
+  openAccounts: () =>
+    set({ accountsOpen: true, settingsOpen: false, paletteOpen: false, versionsOpen: false }),
+  closeAccounts: () => set({ accountsOpen: false }),
   openOnboarding: () => set({ onboardingOpen: true, settingsOpen: false, paletteOpen: false }),
   closeOnboarding: () => set({ onboardingOpen: false }),
 

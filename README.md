@@ -29,9 +29,10 @@ exactly where the line is.
 
 | Works today | Next |
 |---|---|
-| The window, the rail, four pages | Accounts, Quick Login, DPAPI vault (M3) |
-| First run: three questions, stored locally | The launch pipeline, five modes (M4) |
+| The window, the rail, four pages | Quick Login, the six character code (M3) |
+| First run: three questions, stored locally | |
 | Client versions: discover, install, verify, pin, prune | Flags, profiles, precedence (M5) |
+| Accounts: cookie import, DPAPI vault, health, forget | The launch pipeline, five modes (M4) |
 | A command palette with ten working commands | Discovery, then social, then the assistant |
 | Settings, including reset and crash recovery | |
 | Named failures: a code, a cause, an action | |
@@ -133,6 +134,7 @@ True in this build:
 - Every downloaded package is hashed against the manifest Roblox publishes, and a mismatch is thrown away rather than installed.
 - The unpacked client must carry a version resource naming Roblox Corporation and a signature Windows trusts, or the whole install is deleted.
 - Installs are unpacked into a staging folder and moved into place with one rename, so a half-installed client is never visible to Roblox or to this app.
+- A session cookie is sealed with Windows DPAPI before it touches the disk, and it is never shown again after it is added.
 - A version that something is running out of is never removed, and the screen names the process.
 - The page never receives a secret. The Rust half owns every privileged action.
 - Settings are written through a temporary file and a rename, so a crash cannot leave a half-written file behind.

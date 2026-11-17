@@ -8,6 +8,7 @@ import {
   Home,
   Library,
   PackageCheck,
+  UserRound,
   RotateCcw,
   Search,
   Settings,
@@ -30,6 +31,7 @@ export function CommandPalette() {
   const go = useShell((state) => state.go);
   const openSettings = useShell((state) => state.openSettings);
   const openVersions = useShell((state) => state.openVersions);
+  const openAccounts = useShell((state) => state.openAccounts);
   const openOnboarding = useShell((state) => state.openOnboarding);
   const openDataRoot = useShell((state) => state.openDataRoot);
   const settings = useShell((state) => state.settings);
@@ -93,6 +95,17 @@ export function CommandPalette() {
               >
                 <Settings size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
                 <span>Open settings</span>
+              </Command.Item>
+
+              <Command.Item
+                value="open accounts sign in add account"
+                onSelect={() => {
+                  close();
+                  openAccounts();
+                }}
+              >
+                <UserRound size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
+                <span>Open accounts</span>
               </Command.Item>
 
               <Command.Item

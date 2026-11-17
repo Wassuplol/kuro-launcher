@@ -123,3 +123,17 @@ export type VerifyReport = {
   missing: string[];
   packages: string[];
 };
+
+export type AccountHealth = "ok" | "expired" | "unknown";
+
+/** An account as the screen sees it. There is no cookie in this shape. */
+export type AccountView = {
+  userId: number;
+  name: string;
+  display: string;
+  added: number;
+  health: AccountHealth;
+  checkedAt: number;
+  isDefault: boolean;
+  isLastUsed: boolean;
+};

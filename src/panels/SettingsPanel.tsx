@@ -33,6 +33,7 @@ export function SettingsPanel() {
   const update = useShell((state) => state.update);
   const resetSettings = useShell((state) => state.resetSettings);
   const openVersions = useShell((state) => state.openVersions);
+  const openAccounts = useShell((state) => state.openAccounts);
   const bootFailed = useShell((state) => state.bootFailed);
 
   const [name, setName] = useState(settings?.identity.name ?? "");
@@ -231,6 +232,16 @@ export function SettingsPanel() {
           </Section>
 
           <Section title="Roblox">
+            <Row label="Accounts" hint="Sessions saved on this machine, and whether they still work.">
+              <button
+                type="button"
+                onClick={openAccounts}
+                className="ui h-7 shrink-0 rounded-control border border-white/10 px-2.5 text-[12px] text-body hover:border-white/20 hover:bg-white/5"
+              >
+                Open
+              </button>
+            </Row>
+
             <Row
               label="Versions"
               hint="What is installed, what Roblox is serving, and how to install or repair it."
