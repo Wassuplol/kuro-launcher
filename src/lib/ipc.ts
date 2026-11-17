@@ -90,6 +90,13 @@ export const api = {
   openDataRoot: () => call<void>("open_data_root"),
   openVersionsRoot: () => call<void>("open_versions_root"),
 
+  /** Shrinks and shows the window at the opening scene's size. */
+  windowOpen: (width: number, height: number) =>
+    call<void>("window_open", { width, height }),
+  /** Grows the window to the app's size around a fixed centre. */
+  windowGrow: (width: number, height: number, durationMs: number) =>
+    call<void>("window_grow", { width, height, durationMs }),
+
   supplySnapshot: () => call<SupplySnapshot>("supply_snapshot"),
   supplyRefresh: () => call<SupplySnapshot>("supply_refresh"),
   supplyInstall: (kind: ClientKind, upload: string, method: InstallMethod) =>

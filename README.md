@@ -87,6 +87,15 @@ browser.
   <img src="shots/m2-versions.png" alt="The versions drawer: what Roblox is serving, what is installed, and what a prune would remove" width="100%">
 </p>
 
+<p align="center">
+  <img src="shots/opening.png" alt="The opening scene: the ring, the wordmark, and a progress line measured against real work" width="70%">
+</p>
+
+The opening is not a splash bolted onto the front. It reads settings, the
+versions folder on disk, and what Roblox is serving, then grows the window into
+the app around a fixed centre. Every segment of that progress line is one of
+those three steps, so it never claims more than it is doing.
+
 Every screen has an empty state that says why it is empty and what fills it. The
 mascot appears on empty states and the intro only, never beside a failure.
 

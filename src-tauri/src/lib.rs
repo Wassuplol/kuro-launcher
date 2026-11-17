@@ -3,7 +3,8 @@ pub mod settings;
 pub mod supply;
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -14,11 +15,18 @@ use supply::install::{Method, Progress, VerifyReport, EVENT};
 use supply::prune::PruneResult;
 use supply::{Kind, Snapshot, SupplyState};
 
+/// The smallest the main window may be after the opening has finished. Below
+/// this the rail and the page content start colliding.
+const FLOOR: (f64, f64) = (920.0, 620.0);
+
 pub struct AppState {
     pub data_root: PathBuf,
     pub settings: Mutex<Settings>,
     pub settings_error: Option<LaunchError>,
     pub supply: SupplyState,
+    /// Set once the page has taken control of the window. Until then the window
+    /// stays hidden, so nothing full-size is ever painted before the opening.
+    pub opened: Arc<AtomicBool>,
 }
 
 #[derive(Serialize)]
@@ -94,6 +102,152 @@ fn open_data_root(state: State<'_, AppState>) -> Result<(), LaunchError> {
                 format!("Explorer could not open the data folder: {e}"),
             )
         })
+}
+
+/// Shrinks the window to the opening scene and shows it.
+///
+/// The page asks for this, rather than the setup doing it, because the page is
+/// the only part of the app that knows how big the window actually is. The
+/// window-state plugin restores the last size after the window is created, so a
+/// read during setup gets the size from the config file and quietly forgets the
+/// size this person actually uses. The page reads `innerWidth` and `innerHeight`,
+/// which are already the restored values, remembers them as the destination, and
+/// hands the window back here.
+#[tauri::command]
+fn window_open(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    width: f64,
+    height: f64,
+) -> Result<(), LaunchError> {
+    window
+        .set_min_size(Some(tauri::LogicalSize::new(width, height)))
+        .map_err(|e| LaunchError::new(FailureCode::Internal, format!("No minimum size: {e}")))?;
+    window
+        .set_size(tauri::LogicalSize::new(width, height))
+        .map_err(|e| LaunchError::new(FailureCode::Internal, format!("No window size: {e}")))?;
+    let _ = window.center();
+    window
+        .show()
+        .map_err(|e| LaunchError::new(FailureCode::Internal, format!("No window: {e}")))?;
+
+    state.opened.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Resizes the window from where it is to `width` by `height`, growing around a
+/// fixed centre so the opening scene stays still while the window opens up
+/// around it.
+///
+/// This runs in Rust rather than being stepped from the page because it is a
+/// resize per frame: around ninety of them across the transition, and not one of
+/// them should cost a round trip through the IPC bridge.
+#[tauri::command]
+async fn window_grow(
+    window: tauri::Window,
+    width: f64,
+    height: f64,
+    duration_ms: u64,
+) -> Result<(), LaunchError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let min = (width.min(FLOOR.0), height.min(FLOOR.1));
+        let _ = window.set_min_size(Some(tauri::LogicalSize::new(min.0, min.1)));
+
+        let scale = window.scale_factor().unwrap_or(1.0);
+        let target = (
+            (width * scale).round().max(1.0),
+            (height * scale).round().max(1.0),
+        );
+
+        let start = window
+            .inner_size()
+            .map_err(|e| LaunchError::new(FailureCode::Internal, format!("No window size: {e}")))?;
+        let origin = window.outer_position().map_err(|e| {
+            LaunchError::new(FailureCode::Internal, format!("No window position: {e}"))
+        })?;
+
+        // The centre of the window on screen. Everything is interpolated around
+        // it, so a symmetric growth leaves the middle of the scene untouched.
+        let centre = (
+            origin.x as f64 + start.width as f64 / 2.0,
+            origin.y as f64 + start.height as f64 / 2.0,
+        );
+
+        // Driven by the clock rather than by a step count. Each frame costs the
+        // two window calls plus the sleep, and that overhead is not free: a
+        // fixed number of steps ran about forty percent long, which left the
+        // content finishing its fade while the window was still opening.
+        let began = std::time::Instant::now();
+
+        loop {
+            let elapsed = began.elapsed().as_millis() as f64;
+            let progress = if duration_ms == 0 {
+                1.0
+            } else {
+                (elapsed / duration_ms as f64).min(1.0)
+            };
+            let eased = bezier(progress);
+
+            let width = lerp(start.width as f64, target.0, eased).round() as u32;
+            let height = lerp(start.height as f64, target.1, eased).round() as u32;
+
+            let _ = window.set_size(tauri::PhysicalSize::new(width.max(1), height.max(1)));
+            let _ = window.set_position(tauri::PhysicalPosition::new(
+                (centre.0 - width as f64 / 2.0).round() as i32,
+                (centre.1 - height as f64 / 2.0).round() as i32,
+            ));
+
+            if progress >= 1.0 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(8));
+        }
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The window could not be resized: {e}")))?
+}
+
+fn lerp(from: f64, to: f64, t: f64) -> f64 {
+    from + (to - from) * t
+}
+
+/// `cubic-bezier(0.2, 0.8, 0.2, 1)`, the app's one easing, solved by bisection.
+///
+/// Solving rather than approximating keeps the resize in step with every CSS
+/// transition around it: the window and the content it reveals decelerate at the
+/// same rate, which is the whole point of the growth reading as one motion.
+fn bezier(t: f64) -> f64 {
+    const X1: f64 = 0.2;
+    const Y1: f64 = 0.8;
+    const X2: f64 = 0.2;
+    const Y2: f64 = 1.0;
+
+    let mut low = 0.0f64;
+    let mut high = 1.0f64;
+    let mut u = t;
+
+    for _ in 0..24 {
+        let delta = curve(u, X1, X2) - t;
+        if delta.abs() < 1e-5 {
+            break;
+        }
+        if delta < 0.0 {
+            low = u;
+        } else {
+            high = u;
+        }
+        u = (low + high) / 2.0;
+    }
+
+    curve(u, Y1, Y2)
+}
+
+/// One axis of a cubic bezier with endpoints at 0 and 1.
+fn curve(u: f64, p1: f64, p2: f64) -> f64 {
+    let v = 1.0 - u;
+    3.0 * v * v * u * p1 + 3.0 * v * u * u * p2 + u * u * u
 }
 
 /// Opens the Roblox versions folder, so a person can see what the screen is
@@ -361,7 +515,18 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        // Size and position are restored; visibility is not. The plugin saves
+        // `visible: true` with the geometry, and restoring that showed this
+        // window at its full size for a frame before the opening shrank it,
+        // which is exactly the flash the hidden start exists to prevent.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        & !tauri_plugin_window_state::StateFlags::VISIBLE,
+                )
+                .build(),
+        )
         .setup(|app| {
             let root = settings::data_root()?;
             std::fs::create_dir_all(&root)?;
@@ -385,11 +550,33 @@ pub fn run() {
                 }
             }
 
+            // The window is created hidden and stays hidden until the page asks
+            // for it, which is what keeps a full-size frame from flashing before
+            // the opening scene is ready.
+            //
+            // The safety net matters more than it looks: if the page never asks,
+            // whether from a script error or a webview that failed to start, an
+            // app that shows no window at all is unrecoverable. Three seconds
+            // later the window appears at its default size instead.
+            let opened = Arc::new(AtomicBool::new(false));
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unmaximize();
+                let flag = opened.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(3));
+                    if !flag.load(Ordering::SeqCst) {
+                        let _ = window.show();
+                        let _ = window.center();
+                    }
+                });
+            }
+
             app.manage(AppState {
                 data_root: root,
                 settings: Mutex::new(loaded),
                 settings_error,
                 supply: SupplyState::default(),
+                opened,
             });
             Ok(())
         })
@@ -400,6 +587,8 @@ pub fn run() {
             settings_reset,
             open_data_root,
             open_versions_root,
+            window_open,
+            window_grow,
             supply_snapshot,
             supply_refresh,
             supply_install,

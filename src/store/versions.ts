@@ -17,6 +17,19 @@ const PROGRESS_EVENT = "supply:progress";
 
 let listening = false;
 
+/**
+ * The install worker reports whether or not the drawer is on screen, so the
+ * listener is registered once for the life of the process. Dropping events while
+ * the drawer is closed would leave a reopened drawer showing a stale bar.
+ */
+function ensureListening(set: (partial: Partial<VersionsState>) => void): void {
+  if (listening) return;
+  listening = true;
+  void listen<InstallProgress>(PROGRESS_EVENT, (event) => {
+    set({ progress: event.payload });
+  });
+}
+
 function announce(value: unknown, fallback: string): void {
   const failure = value instanceof CommandError ? value : null;
   toast.error(failure?.message ?? fallback, { description: failureDetail(failure) });
@@ -34,6 +47,9 @@ type VersionsState = {
 
   load: () => Promise<void>;
   refresh: () => Promise<void>;
+  /** Reads the versions folder and the live version for the opening, quietly. */
+  prepareInstalled: () => Promise<void>;
+  prepareLive: () => Promise<void>;
   install: (kind: ClientKind, upload: string, method: InstallMethod) => Promise<void>;
   cancel: () => Promise<void>;
   pin: (folder: string | null) => Promise<void>;
@@ -54,16 +70,29 @@ export const useVersions = create<VersionsState>()((set, get) => ({
   plan: null,
   checks: {},
 
-  load: async () => {
-    // One listener for the life of the process: the worker emits whether or not
-    // the drawer is on screen, and dropping events while it is closed would
-    // leave a reopened drawer showing a stale bar.
-    if (!listening) {
-      listening = true;
-      void listen<InstallProgress>(PROGRESS_EVENT, (event) => {
-        set({ progress: event.payload });
-      });
+  prepareInstalled: async () => {
+    ensureListening(set);
+    try {
+      const snapshot = await api.supplySnapshot();
+      set({ snapshot });
+    } catch {
+      // The opening is not the place to argue with a machine. The versions
+      // screen re-reads on open and says what is wrong there.
     }
+  },
+
+  prepareLive: async () => {
+    ensureListening(set);
+    try {
+      const snapshot = await api.supplyRefresh();
+      set({ snapshot });
+    } catch {
+      // Same: the Check button is the place to retry, with the reason shown.
+    }
+  },
+
+  load: async () => {
+    ensureListening(set);
 
     set({ loading: true });
     try {

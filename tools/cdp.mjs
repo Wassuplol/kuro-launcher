@@ -6,6 +6,7 @@
 //   node tools/cdp.mjs shot <path.png>
 //   node tools/cdp.mjs type "<css selector>" <text>
 //   node tools/cdp.mjs key <Enter|Tab|Escape>
+//   node tools/cdp.mjs click <x> <y>
 
 import { writeFileSync } from "node:fs";
 
@@ -85,6 +86,22 @@ try {
     });
     await session.send("Input.insertText", { text: words.join(" ") });
     console.log("typed");
+  } else if (command === "click") {
+    // A trusted press and release, which is the only kind of click the opening
+    // accepts as "skip". A synthetic MouseEvent would not prove anything.
+    const x = Number(rest[0]);
+    const y = Number(rest[1]);
+    for (const type of ["mousePressed", "mouseReleased"]) {
+      await session.send("Input.dispatchMouseEvent", {
+        type,
+        x,
+        y,
+        button: "left",
+        clickCount: 1,
+        buttons: type === "mousePressed" ? 1 : 0,
+      });
+    }
+    console.log(`clicked ${x},${y}`);
   } else if (command === "key") {
     const name = rest[0];
     const mods = rest[1] ?? "";
@@ -115,7 +132,7 @@ try {
     });
     console.log(`pressed ${mods ? mods + "+" : ""}${name}`);
   } else {
-    console.error("usage: eval | shot | type | key");
+    console.error("usage: eval | shot | type | key | click");
     process.exitCode = 1;
   }
 } finally {

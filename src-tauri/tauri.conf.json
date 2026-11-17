@@ -17,14 +17,15 @@
         "title": "KURO",
         "width": 1180,
         "height": 760,
-        "minWidth": 920,
-        "minHeight": 620,
+        "minWidth": 520,
+        "minHeight": 360,
         "decorations": false,
         "transparent": false,
         "resizable": true,
         "center": true,
         "theme": "Dark",
-        "backgroundColor": "#0B0D12"
+        "backgroundColor": "#0B0D12",
+        "visible": false
       }
     ],
     "security": {
@@ -33,7 +34,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
