@@ -23,6 +23,16 @@ the bottom with the milestone that brings them.
 | react-hotkeys-hook | the keyboard map: Ctrl 1 to 4, Ctrl K, / and Escape |
 | clsx, tailwind-merge | className composition without duplicate utilities |
 
+## Rust, for the client manager
+
+| Crate | Job |
+|---|---|
+| ureq | blocking HTTP for the two Roblox endpoints, with Windows' own TLS through native-tls |
+| zip | unpacking Roblox's package archives, with the path-escape guard |
+| md-5 | the hash Roblox publishes per package. Not chosen by us; it is the manifest's format |
+| sha2 | the per-file baseline written at install time and checked by repair |
+| windows | Authenticode verification, version resources, and the process walk that answers "is this in use" |
+
 ## Development
 
 | Package | Job |

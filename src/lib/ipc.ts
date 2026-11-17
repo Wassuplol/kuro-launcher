@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppInfo, Settings } from "./types";
+import type {
+  AppInfo,
+  ClientKind,
+  InstallMethod,
+  PrunePlan,
+  PruneResult,
+  Settings,
+  SupplySnapshot,
+  VerifyReport,
+} from "./types";
 
 export type FailureCode =
   | "client_missing"
@@ -17,6 +26,8 @@ export type FailureCode =
   | "config_unreadable"
   | "config_unwritable"
   | "not_found"
+  | "channel_unavailable"
+  | "cancelled"
   | "internal";
 
 export type Failure = {
@@ -77,6 +88,19 @@ export const api = {
   saveSettings: (next: Settings) => call<Settings>("settings_save", { next }),
   resetSettings: () => call<Settings>("settings_reset"),
   openDataRoot: () => call<void>("open_data_root"),
+  openVersionsRoot: () => call<void>("open_versions_root"),
+
+  supplySnapshot: () => call<SupplySnapshot>("supply_snapshot"),
+  supplyRefresh: () => call<SupplySnapshot>("supply_refresh"),
+  supplyInstall: (kind: ClientKind, upload: string, method: InstallMethod) =>
+    call<SupplySnapshot>("supply_install", { kind, upload, method }),
+  supplyCancel: () => call<void>("supply_cancel"),
+  supplyPin: (folder: string | null) => call<Settings>("supply_pin", { folder }),
+  supplyPrunePlan: () => call<PrunePlan>("supply_prune_plan"),
+  supplyPrune: () => call<PruneResult>("supply_prune"),
+  supplyVerify: (folder: string) => call<VerifyReport>("supply_verify", { folder }),
+  supplyRepair: (folder: string) => call<VerifyReport>("supply_repair", { folder }),
+  supplyRemove: (folder: string) => call<SupplySnapshot>("supply_remove", { folder }),
 };
 
 /** Every failure reaches the screen as the code plus the offered action. */

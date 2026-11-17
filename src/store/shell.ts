@@ -13,6 +13,7 @@ type ShellState = {
   page: Page;
   paletteOpen: boolean;
   settingsOpen: boolean;
+  versionsOpen: boolean;
   onboardingOpen: boolean;
 
   boot: () => Promise<void>;
@@ -21,6 +22,8 @@ type ShellState = {
   closePalette: () => void;
   openSettings: () => void;
   closeSettings: () => void;
+  openVersions: () => void;
+  closeVersions: () => void;
   openOnboarding: () => void;
   closeOnboarding: () => void;
   openDataRoot: () => Promise<void>;
@@ -36,6 +39,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   page: pageFromHash(window.location.hash),
   paletteOpen: false,
   settingsOpen: false,
+  versionsOpen: false,
   onboardingOpen: false,
 
   boot: async () => {
@@ -59,13 +63,15 @@ export const useShell = create<ShellState>()((set, get) => ({
 
   go: (page) => {
     reflect(page);
-    set({ page, paletteOpen: false, settingsOpen: false });
+    set({ page, paletteOpen: false, settingsOpen: false, versionsOpen: false });
   },
 
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
-  openSettings: () => set({ settingsOpen: true }),
+  openSettings: () => set({ settingsOpen: true, versionsOpen: false }),
   closeSettings: () => set({ settingsOpen: false }),
+  openVersions: () => set({ versionsOpen: true, settingsOpen: false, paletteOpen: false }),
+  closeVersions: () => set({ versionsOpen: false }),
   openOnboarding: () => set({ onboardingOpen: true, settingsOpen: false, paletteOpen: false }),
   closeOnboarding: () => set({ onboardingOpen: false }),
 

@@ -31,3 +31,95 @@ export type AppInfo = {
   dataRoot: string;
   settingsError?: SettingsError;
 };
+
+export type ClientKind = "player" | "studio";
+
+export type InstallMethod = "bootstrap" | "direct";
+
+/** One channel, and whether Roblox will answer it without a session. */
+export type Channel = {
+  id: string;
+  label: string;
+  available: boolean;
+  note?: string | null;
+};
+
+export type LiveVersion = {
+  channel: string;
+  version: string;
+  /** The deployment folder name, also the CDN prefix. */
+  upload: string;
+  /** Unix seconds, so the screen can print when it was asked. */
+  checkedAt: number;
+};
+
+export type InstalledClient = {
+  folder: string;
+  path: string;
+  /** Which root this folder sits in, in words. */
+  root: string;
+  perUser: boolean;
+  kind: ClientKind | null;
+  version: string | null;
+  publisher: string | null;
+  /** The executable is present and its own version resource names Roblox. */
+  real: boolean;
+  bytes: number;
+  files: number;
+  modified: number | null;
+  /** Kuro installed this folder, so it has hashes to check against. */
+  tracked: boolean;
+  pinned: boolean;
+  /** The process holding this folder open, when one does. */
+  holder: string | null;
+  live: boolean;
+};
+
+export type ClientRoot = {
+  path: string;
+  label: string;
+  perUser: boolean;
+  exists: boolean;
+};
+
+export type SupplySnapshot = {
+  /** Where a new client would be written. */
+  versionsRoot: string;
+  roots: ClientRoot[];
+  exists: boolean;
+  installed: InstalledClient[];
+  livePlayer: LiveVersion | null;
+  liveStudio: LiveVersion | null;
+  channels: Channel[];
+  totalBytes: number;
+};
+
+export type InstallProgress = {
+  phase: string;
+  label: string;
+  done: number;
+  total: number;
+};
+
+export type PrunePlan = {
+  remove: string[];
+  keep: { folder: string; reason: string }[];
+  bytes: number;
+};
+
+export type PruneResult = {
+  removed: string[];
+  freed: number;
+  kept: { folder: string; reason: string }[];
+  failed: { folder: string; code: string; message: string }[];
+};
+
+export type VerifyReport = {
+  folder: string;
+  /** False means the check could not run, not that the folder is clean. */
+  tracked: boolean;
+  checked: number;
+  mismatched: string[];
+  missing: string[];
+  packages: string[];
+};

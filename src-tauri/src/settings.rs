@@ -33,12 +33,23 @@ pub struct Intro {
     pub instant_start: bool,
 }
 
+/// What the version manager remembers between runs. Only the pin: everything
+/// else about the clients is read from disk each time, because Roblox changes
+/// it without telling us.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Supply {
+    /// A client folder name, `version-…`, that a prune must never remove.
+    pub pinned: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     pub schema: u32,
     pub identity: Identity,
     pub intro: Intro,
+    pub supply: Supply,
     pub advanced: bool,
 }
 
@@ -48,6 +59,7 @@ impl Default for Settings {
             schema: SCHEMA,
             identity: Identity::default(),
             intro: Intro::default(),
+            supply: Supply::default(),
             advanced: false,
         }
     }

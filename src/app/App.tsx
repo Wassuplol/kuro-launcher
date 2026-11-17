@@ -5,6 +5,7 @@ import { CommandPalette } from "../panels/CommandPalette";
 import { Intro } from "../panels/Intro";
 import { Onboarding } from "../panels/Onboarding";
 import { SettingsPanel } from "../panels/SettingsPanel";
+import { VersionsPanel } from "../panels/VersionsPanel";
 import { useShell } from "../store/shell";
 import { Shell } from "./Shell";
 
@@ -57,6 +58,7 @@ export function App() {
 
       {ready ? <CommandPalette /> : null}
       {ready ? <SettingsPanel /> : null}
+      {ready ? <VersionsPanel /> : null}
 
       <Toaster
         theme="dark"

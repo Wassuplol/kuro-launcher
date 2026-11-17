@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Home,
   Library,
+  PackageCheck,
   RotateCcw,
   Search,
   Settings,
@@ -28,6 +29,7 @@ export function CommandPalette() {
   const close = useShell((state) => state.closePalette);
   const go = useShell((state) => state.go);
   const openSettings = useShell((state) => state.openSettings);
+  const openVersions = useShell((state) => state.openVersions);
   const openOnboarding = useShell((state) => state.openOnboarding);
   const openDataRoot = useShell((state) => state.openDataRoot);
   const settings = useShell((state) => state.settings);
@@ -91,6 +93,17 @@ export function CommandPalette() {
               >
                 <Settings size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
                 <span>Open settings</span>
+              </Command.Item>
+
+              <Command.Item
+                value="open roblox versions client"
+                onSelect={() => {
+                  close();
+                  openVersions();
+                }}
+              >
+                <PackageCheck size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
+                <span>Open Roblox versions</span>
               </Command.Item>
 
               <Command.Item

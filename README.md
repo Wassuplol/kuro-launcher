@@ -21,21 +21,26 @@ The official front end for Roblox is a website in a window. KURO is the same job
 built as a desktop application: one place for your accounts, your client versions
 and your settings, and a launch that lands in the right server the first time.
 
-It is being built in the open, milestone by milestone. The shell is real. The
-Roblox half comes next, and the table below says exactly where the line is.
+It is being built in the open, milestone by milestone. The shell and the client
+manager are real. Accounts and launching come next, and the table below says
+exactly where the line is.
 
 ## Where it is today
 
 | Works today | Next |
 |---|---|
-| The window, the rail, four pages | Client discovery and install (M2) |
-| First run: three questions, stored locally | Accounts, Quick Login, DPAPI vault (M3) |
-| A command palette with nine working commands | The launch pipeline, five modes (M4) |
-| Settings, including reset and crash recovery | Flags, profiles, precedence (M5) |
-| Named failures: a code, a cause, an action | Discovery, then social, then the assistant |
+| The window, the rail, four pages | Accounts, Quick Login, DPAPI vault (M3) |
+| First run: three questions, stored locally | The launch pipeline, five modes (M4) |
+| Client versions: discover, install, verify, pin, prune | Flags, profiles, precedence (M5) |
+| A command palette with ten working commands | Discovery, then social, then the assistant |
+| Settings, including reset and crash recovery | |
+| Named failures: a code, a cause, an action | |
 
-Nothing in this build talks to the network. That is deliberate: the first money
-goes on the parts that can be verified without an account.
+It talks to two Roblox endpoints and nothing else: the version service that says
+which build is live, and the CDN that serves it. Every package is checked against
+the hash Roblox publishes for it, and the unpacked client has to carry a
+signature Windows trusts before it is allowed to stay. There is no server of
+ours, and no telemetry in either direction.
 
 ## What it is not
 
@@ -61,7 +66,7 @@ flag writer and the protocol handlers. No secret reaches the page.
                                                   Roblox client
 ```
 
-Tauri 2 and Rust behind React 19 and TypeScript. The release binary is 7 MB,
+Tauri 2 and Rust behind React 19 and TypeScript. The release binary is 8 MB,
 because it uses the WebView2 that Windows already ships instead of bundling a
 browser.
 
@@ -76,6 +81,10 @@ browser.
 <p align="center">
   <img src="shots/settings.png" alt="Settings" width="49%">
   <img src="shots/friends.png" alt="An empty state, with the mascot at rest" width="49%">
+</p>
+
+<p align="center">
+  <img src="shots/m2-versions.png" alt="The versions drawer: what Roblox is serving, what is installed, and what a prune would remove" width="100%">
 </p>
 
 Every screen has an empty state that says why it is empty and what fills it. The
@@ -111,7 +120,11 @@ uploaded as an artifact.
 
 True in this build:
 
-- There is no network code at all. Nothing is fetched and nothing is sent.
+- Two Roblox endpoints are contacted, and nothing else. No telemetry, no analytics, no server of ours.
+- Every downloaded package is hashed against the manifest Roblox publishes, and a mismatch is thrown away rather than installed.
+- The unpacked client must carry a version resource naming Roblox Corporation and a signature Windows trusts, or the whole install is deleted.
+- Installs are unpacked into a staging folder and moved into place with one rename, so a half-installed client is never visible to Roblox or to this app.
+- A version that something is running out of is never removed, and the screen names the process.
 - The page never receives a secret. The Rust half owns every privileged action.
 - Settings are written through a temporary file and a rename, so a crash cannot leave a half-written file behind.
 - A settings file that cannot be read does not stop the app: it starts on defaults and offers a reset.

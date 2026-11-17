@@ -150,6 +150,7 @@ export function Shell() {
       const state = useShell.getState();
       if (state.paletteOpen) closePalette();
       else if (state.settingsOpen) closeSettings();
+      else if (state.versionsOpen) useShell.getState().closeVersions();
     },
     { enableOnFormTags: true },
   );

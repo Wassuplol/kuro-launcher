@@ -1,10 +1,8 @@
-import { X } from "lucide-react";
-import { motion } from "motion/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
+import { PanelFrame, Row, Section } from "../components/Panel";
 import { Toggle } from "../components/Toggle";
 import { cn } from "../lib/cn";
-import { SETTLE } from "../lib/motion";
 import type { Intent } from "../lib/types";
 import { useShell } from "../store/shell";
 
@@ -26,37 +24,6 @@ const INTENTS: { id: Intent; label: string }[] = [
   { id: "building_something", label: "Building something" },
 ];
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="mt-7 first:mt-5">
-      <h2 className="label">{title}</h2>
-      <div className="mt-2 overflow-hidden rounded-card border border-white/8 bg-page/50">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-function Row({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="flex min-h-[46px] items-center justify-between gap-4 border-b border-white/6 px-3.5 py-2.5 last:border-b-0">
-      <div className="min-w-0">
-        <div className="text-[13px] text-body">{label}</div>
-        {hint ? <div className="mt-0.5 text-[11px] leading-[1.5] text-muted">{hint}</div> : null}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 export function SettingsPanel() {
   const open = useShell((state) => state.settingsOpen);
   const close = useShell((state) => state.closeSettings);
@@ -65,6 +32,7 @@ export function SettingsPanel() {
   const info = useShell((state) => state.info);
   const update = useShell((state) => state.update);
   const resetSettings = useShell((state) => state.resetSettings);
+  const openVersions = useShell((state) => state.openVersions);
   const bootFailed = useShell((state) => state.bootFailed);
 
   const [name, setName] = useState(settings?.identity.name ?? "");
@@ -104,31 +72,8 @@ export function SettingsPanel() {
   };
 
   return (
-    <div className="fixed inset-0 z-40">
-      <div className="absolute inset-0 bg-page/70" onClick={close} aria-hidden />
-
-      <motion.aside
-        role="dialog"
-        aria-label="Settings"
-        initial={{ x: 24, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={SETTLE}
-        className="absolute top-0 right-0 flex h-full w-[520px] max-w-[92vw] flex-col border-l border-white/8 bg-panel"
-      >
-        <header className="flex h-11 shrink-0 items-center justify-between border-b border-white/8 pr-2 pl-5">
-          <h1 className="text-[13px] font-semibold text-body">Settings</h1>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Close settings"
-            className="ui flex h-8 w-8 items-center justify-center rounded-control text-muted hover:bg-white/6 hover:text-body"
-          >
-            <X size={15} strokeWidth={1.6} />
-          </button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-12">
-          {bootFailed ? (
+    <PanelFrame title="Settings" onClose={close}>
+      {bootFailed ? (
             <div className="mt-4 rounded-card border border-danger/30 bg-danger-fill/10 p-3.5">
               <div className="text-[12px] font-semibold text-danger">
                 Your settings file could not be read
@@ -285,6 +230,21 @@ export function SettingsPanel() {
             </Row>
           </Section>
 
+          <Section title="Roblox">
+            <Row
+              label="Versions"
+              hint="What is installed, what Roblox is serving, and how to install or repair it."
+            >
+              <button
+                type="button"
+                onClick={openVersions}
+                className="ui h-7 shrink-0 rounded-control border border-white/10 px-2.5 text-[12px] text-body hover:border-white/20 hover:bg-white/5"
+              >
+                Open
+              </button>
+            </Row>
+          </Section>
+
           <Section title="Advanced">
             <Row label="Advanced mode" hint="Shows the data folder and build details.">
               <Toggle
@@ -322,7 +282,7 @@ export function SettingsPanel() {
           </Section>
             </>
           ) : (
-            <div className="mt-5 rounded-card border border-white/8 bg-page/50 p-4">
+        <div className="mt-5 rounded-card border border-white/8 bg-page/50 p-4">
               <h2 className="text-[13px] font-semibold text-body">
                 Your settings could not be read
               </h2>
@@ -339,9 +299,7 @@ export function SettingsPanel() {
               </button>
             </div>
           )}
-        </div>
-      </motion.aside>
-    </div>
+    </PanelFrame>
   );
 }
 
