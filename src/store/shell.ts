@@ -2,13 +2,14 @@ import { toast } from "sonner";
 import { create } from "zustand";
 
 import { pageFromHash, reflect, type Page } from "../app/router";
-import { api, CommandError } from "../lib/ipc";
+import { api, CommandError, detailOf, failureDetail } from "../lib/ipc";
 import type { AppInfo, Settings } from "../lib/types";
 
 type ShellState = {
   ready: boolean;
   info: AppInfo | null;
   settings: Settings | null;
+  bootFailed: boolean;
   page: Page;
   paletteOpen: boolean;
   settingsOpen: boolean;
@@ -23,6 +24,7 @@ type ShellState = {
   openOnboarding: () => void;
   closeOnboarding: () => void;
   openDataRoot: () => Promise<void>;
+  resetSettings: () => Promise<void>;
   update: (mutate: (draft: Settings) => void) => Promise<void>;
 };
 
@@ -30,6 +32,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   ready: false,
   info: null,
   settings: null,
+  bootFailed: false,
   page: pageFromHash(window.location.hash),
   paletteOpen: false,
   settingsOpen: false,
@@ -38,11 +41,19 @@ export const useShell = create<ShellState>()((set, get) => ({
   boot: async () => {
     try {
       const [info, settings] = await Promise.all([api.appInfo(), api.loadSettings()]);
-      set({ info, settings, ready: true });
+      set({ info, settings, ready: true, bootFailed: Boolean(info.settingsError) });
+
+      if (info.settingsError) {
+        toast.error(info.settingsError.message, {
+          description: detailOf(info.settingsError.code, info.settingsError.action),
+        });
+      }
     } catch (value) {
       const failure = value instanceof CommandError ? value : null;
-      toast.error(failure?.message ?? "The app could not read its own settings.");
-      set({ ready: true });
+      toast.error(failure?.message ?? "The app could not read its own settings.", {
+        description: failureDetail(failure),
+      });
+      set({ ready: true, bootFailed: true });
     }
   },
 
@@ -63,7 +74,22 @@ export const useShell = create<ShellState>()((set, get) => ({
       await api.openDataRoot();
     } catch (value) {
       const failure = value instanceof CommandError ? value : null;
-      toast.error(failure?.message ?? "The data folder could not open.");
+      toast.error(failure?.message ?? "The data folder could not open.", {
+        description: failureDetail(failure),
+      });
+    }
+  },
+
+  resetSettings: async () => {
+    try {
+      const fresh = await api.resetSettings();
+      set({ settings: fresh, bootFailed: false });
+      toast.success("Settings reset. The defaults are back.");
+    } catch (value) {
+      const failure = value instanceof CommandError ? value : null;
+      toast.error(failure?.message ?? "Settings could not be reset.", {
+        description: failureDetail(failure),
+      });
     }
   },
 
@@ -82,7 +108,7 @@ export const useShell = create<ShellState>()((set, get) => ({
       set({ settings: current });
       const failure = value instanceof CommandError ? value : null;
       toast.error(failure?.message ?? "Your settings did not save.", {
-        description: failure?.action,
+        description: failureDetail(failure),
       });
     }
   },

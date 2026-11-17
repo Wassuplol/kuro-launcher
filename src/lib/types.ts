@@ -18,9 +18,16 @@ export type Settings = {
   advanced: boolean;
 };
 
+export type SettingsError = {
+  code: string;
+  message: string;
+  action?: string;
+};
+
 export type AppInfo = {
   name: string;
   version: string;
   identifier: string;
   dataRoot: string;
+  settingsError?: SettingsError;
 };

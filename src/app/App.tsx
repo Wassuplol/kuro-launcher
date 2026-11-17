@@ -15,6 +15,7 @@ export function App() {
   const ready = useShell((state) => state.ready);
   const settings = useShell((state) => state.settings);
   const onboardingOpen = useShell((state) => state.onboardingOpen);
+  const bootFailed = useShell((state) => state.bootFailed);
   const boot = useShell((state) => state.boot);
   const openOnboarding = useShell((state) => state.openOnboarding);
   const closeOnboarding = useShell((state) => state.closeOnboarding);
@@ -31,13 +32,13 @@ export function App() {
     decided.current = true;
 
     if (settings?.intro.instantStart === true || introPlayed) {
-      if (settings && !settings.identity.onboarded) openOnboarding();
+      if (settings && !settings.identity.onboarded && !bootFailed) openOnboarding();
       return;
     }
 
     introPlayed = true;
     setIntro(true);
-  }, [ready, settings, openOnboarding]);
+  }, [ready, settings, bootFailed, openOnboarding]);
 
   return (
     <>
@@ -47,7 +48,7 @@ export function App() {
         <Intro
           onDone={() => {
             setIntro(false);
-            if (settings && !settings.identity.onboarded) openOnboarding();
+            if (settings && !settings.identity.onboarded && !bootFailed) openOnboarding();
           }}
         />
       ) : null}

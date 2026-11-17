@@ -75,5 +75,16 @@ export const api = {
   appInfo: () => call<AppInfo>("app_info"),
   loadSettings: () => call<Settings>("settings_load"),
   saveSettings: (next: Settings) => call<Settings>("settings_save", { next }),
+  resetSettings: () => call<Settings>("settings_reset"),
   openDataRoot: () => call<void>("open_data_root"),
 };
+
+/** Every failure reaches the screen as the code plus the offered action. */
+export function detailOf(code: string, action?: string): string {
+  return action ? `${code} · ${action}` : code;
+}
+
+export function failureDetail(failure: CommandError | null): string | undefined {
+  if (!failure) return undefined;
+  return detailOf(failure.code, failure.action);
+}

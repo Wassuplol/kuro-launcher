@@ -16,7 +16,7 @@ What was built, what was actually exercised, and what is still missing.
 - Four pages, each with an honest empty state. No dead controls: Search has no
   field until a search backend exists.
 - Rust half: `error.rs` (the failure taxonomy), `settings.rs` (atomic writes into
-  one data root, portable mode by a `portable` marker), `lib.rs` (four commands,
+  one data root, portable mode by a `portable` marker), `lib.rs` (five commands,
   single instance, window state).
 - MIT licence, `deny.toml`, GitHub Actions: pnpm audit, `tsc --noEmit`,
   `cargo fmt --check`, `cargo clippy -D warnings`, `cargo deny check`, release
@@ -59,6 +59,8 @@ is a real interaction against the shipped code, not a code reading.
 | Palette command | "Open settings" opens the settings panel |
 | Open folder | Explorer opened at `%APPDATA%\com.wassuplol.kuro` |
 | Skip the intro toggle | wrote `instantStart: true` |
+| Corrupt settings file | app still starts, toast reads `config_unreadable · Reset your answers`, settings panel shows the recovery banner |
+| Reset settings | rewrote the defaults to disk, cleared the banner, confirmed with a toast |
 | No horizontal overflow | 1180x760 viewport, scroll size identical |
 | Bundled font active | `document.fonts.check('13px "Inter Variable"')` true |
 | Shipped binary, no debug port | real screen capture renders the shell, port 9333 refuses |
@@ -76,6 +78,9 @@ is a real interaction against the shipped code, not a code reading.
    was too quiet to follow with the eye. Taller list, stronger selected state.
 5. **Empty states sat high with a dead lower half** and the text hugged the left
    edge while the mascot floated mid-page. Now centred as one group.
+6. **A corrupt settings file stopped the app from starting**, so the recovery UI
+   could never appear. Boot now falls back to defaults, records the failure in
+   `AppInfo`, and the settings panel offers a reset that rewrites a clean file.
 
 ## Deviations from the master prompt, with reasons
 

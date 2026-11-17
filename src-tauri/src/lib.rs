@@ -13,6 +13,7 @@ use settings::Settings;
 pub struct AppState {
     pub data_root: PathBuf,
     pub settings: Mutex<Settings>,
+    pub settings_error: Option<LaunchError>,
 }
 
 #[derive(Serialize)]
@@ -22,6 +23,8 @@ pub struct AppInfo {
     pub version: String,
     pub identifier: String,
     pub data_root: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settings_error: Option<LaunchError>,
 }
 
 fn poisoned() -> LaunchError {
@@ -38,6 +41,7 @@ fn app_info(app: tauri::AppHandle, state: State<'_, AppState>) -> AppInfo {
         version: app.package_info().version.to_string(),
         identifier: app.config().identifier.clone(),
         data_root: state.data_root.to_string_lossy().to_string(),
+        settings_error: state.settings_error.clone(),
     }
 }
 
@@ -54,6 +58,17 @@ fn settings_save(state: State<'_, AppState>, next: Settings) -> Result<Settings,
     let mut guard = state.settings.lock().map_err(|_| poisoned())?;
     *guard = next.clone();
     Ok(next)
+}
+
+/// Recovery for a settings file that cannot be read. Writes the defaults back
+/// and returns them, so a broken file never leaves the app without a way out.
+#[tauri::command]
+fn settings_reset(state: State<'_, AppState>) -> Result<Settings, LaunchError> {
+    let fresh = Settings::default();
+    settings::save(&state.data_root, &fresh)?;
+    let mut guard = state.settings.lock().map_err(|_| poisoned())?;
+    *guard = fresh.clone();
+    Ok(fresh)
 }
 
 /// Opens the data root in Explorer. Spawned directly so the frontend never
@@ -85,10 +100,22 @@ pub fn run() {
         .setup(|app| {
             let root = settings::data_root()?;
             std::fs::create_dir_all(&root)?;
-            let loaded = settings::load(&root)?;
+
+            // A settings file that cannot be read must not stop the app from
+            // starting. The defaults take over and the UI is told why, so the
+            // person still has a way out.
+            let (loaded, settings_error) = match settings::load(&root) {
+                Ok(settings) => (settings, None),
+                Err(error) => {
+                    eprintln!("settings could not be read: {error}");
+                    (Settings::default(), Some(error))
+                }
+            };
+
             app.manage(AppState {
                 data_root: root,
                 settings: Mutex::new(loaded),
+                settings_error,
             });
             Ok(())
         })
@@ -96,6 +123,7 @@ pub fn run() {
             app_info,
             settings_load,
             settings_save,
+            settings_reset,
             open_data_root
         ])
         .run(tauri::generate_context!())

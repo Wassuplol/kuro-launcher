@@ -64,6 +64,8 @@ export function SettingsPanel() {
   const settings = useShell((state) => state.settings);
   const info = useShell((state) => state.info);
   const update = useShell((state) => state.update);
+  const resetSettings = useShell((state) => state.resetSettings);
+  const bootFailed = useShell((state) => state.bootFailed);
 
   const [name, setName] = useState(settings?.identity.name ?? "");
   const [confirming, setConfirming] = useState(false);
@@ -72,9 +74,10 @@ export function SettingsPanel() {
     setName(settings?.identity.name ?? "");
   }, [settings?.identity.name]);
 
-  if (!open || !settings) return null;
+  if (!open) return null;
 
   const commitName = () => {
+    if (!settings) return;
     const next = name.trim();
     if (next === settings.identity.name) return;
     void update((draft) => {
@@ -125,7 +128,28 @@ export function SettingsPanel() {
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-12">
-          <Section title="You">
+          {bootFailed ? (
+            <div className="mt-4 rounded-card border border-danger/30 bg-danger-fill/10 p-3.5">
+              <div className="text-[12px] font-semibold text-danger">
+                Your settings file could not be read
+              </div>
+              <p className="mt-1 text-[12px] leading-[1.6] text-muted">
+                The app started with defaults. Resetting writes a clean file; the old answers
+                are gone either way.
+              </p>
+              <button
+                type="button"
+                onClick={() => void resetSettings()}
+                className="ui mt-2.5 h-7 rounded-control border border-danger/40 px-2.5 text-[12px] text-danger hover:bg-danger-fill/20"
+              >
+                Reset settings
+              </button>
+            </div>
+          ) : null}
+
+          {settings ? (
+            <>
+              <Section title="You">
             <Row label="Name" hint="Shown in the greeting on Home.">
               <input
                 value={name}
@@ -296,6 +320,25 @@ export function SettingsPanel() {
               session anywhere except Roblox.
             </div>
           </Section>
+            </>
+          ) : (
+            <div className="mt-5 rounded-card border border-white/8 bg-page/50 p-4">
+              <h2 className="text-[13px] font-semibold text-body">
+                Your settings could not be read
+              </h2>
+              <p className="mt-1.5 text-[12px] leading-[1.6] text-muted">
+                The file is on disk but unreadable. Resetting writes the defaults back and asks
+                the three questions again.
+              </p>
+              <button
+                type="button"
+                onClick={() => void resetSettings()}
+                className="ui mt-3 h-8 rounded-control bg-gold px-3 text-[12px] font-semibold text-page hover:bg-[#f0cd7c]"
+              >
+                Reset settings
+              </button>
+            </div>
+          )}
         </div>
       </motion.aside>
     </div>
