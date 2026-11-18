@@ -26,7 +26,9 @@ import type {
   LaunchState,
   LaunchTile,
   Ledger,
+  LinkState,
   MultiInstance,
+  Party,
   PlayLog,
   Played,
   PrunePlan,
@@ -155,6 +157,16 @@ export const api = {
   tileSave: (profile: LaunchTile) => call<LaunchTile[]>("profiles_save", { profile }),
   tileDelete: (id: string) => call<LaunchTile[]>("profiles_delete", { id }),
   tileLaunch: (id: string) => call<Launched>("profiles_launch", { id }),
+
+  /** Where `kuro://` points right now, and whether that is this build. */
+  linkState: () => call<LinkState>("link_state"),
+  linkRegister: () => call<LinkState>("link_register"),
+  linkUnregister: () => call<LinkState>("link_unregister"),
+  /** The link waiting for the page, taken rather than read. */
+  linkTake: () => call<Party | null>("link_take"),
+  /** The text for a party link; null when there is nothing to point at. */
+  linkFor: (place: number | null, server: string | null, account: number | null) =>
+    call<string | null>("link_for", { place, server, account }),
 
   /** What Windows says about the graphics preference for the build about to run. */
   gpuView: () => call<GpuPin>("gpu_view"),

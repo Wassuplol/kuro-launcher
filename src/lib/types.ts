@@ -213,6 +213,21 @@ export type LaunchTile = {
   used: number;
 };
 
+/** What a `kuro://` link carries. Every field can be missing: a link is text from outside. */
+export type Party = {
+  place: number | null;
+  /** The job id: Roblox's own name for one exact server instance. */
+  server: string | null;
+  account: number | null;
+};
+
+/** Whether `kuro://` points at this build. */
+export type LinkState = {
+  command: string | null;
+  ours: boolean;
+  exe: string;
+};
+
 export type LedgerTotals = {
   seconds: number;
   sessions: number;

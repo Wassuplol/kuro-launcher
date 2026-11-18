@@ -507,6 +507,22 @@ function ReceiptRow({ receipt }: { receipt: Receipt }) {
 }
 
 function Details({ receipt }: { receipt: Receipt }) {
+  const [copied, setCopied] = useState(false);
+
+  // The job id is what makes a link land in this exact server, and the log is the only
+  // place this app ever learns it.
+  const copyParty = async () => {
+    const url = await api.linkFor(receipt.place, receipt.job, null).catch(() => null);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Nothing to do but leave the button as it was: the log row still says everything.
+    }
+  };
+
   const open = async () => {
     try {
       await api.receiptsOpen(receipt.logPath);
@@ -587,6 +603,16 @@ function Details({ receipt }: { receipt: Receipt }) {
           <ExternalLink size={11} strokeWidth={1.8} />
           Open the log
         </button>
+        {receipt.place && receipt.job ? (
+          <button
+            type="button"
+            onClick={() => void copyParty()}
+            title="A kuro:// link that opens this exact server"
+            className="ui flex h-6 items-center gap-1.5 rounded-control border border-white/10 px-2 text-[11px] text-muted hover:border-white/20 hover:text-body"
+          >
+            {copied ? "Copied" : "Copy party link"}
+          </button>
+        ) : null}
         {receipt.action ? <span className="text-[11px] text-gold">{receipt.action}</span> : null}
       </div>
     </div>

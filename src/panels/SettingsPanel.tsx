@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { PanelFrame, Row, Section } from "../components/Panel";
 import { AssistantSection } from "./AssistantSection";
 import { Toggle } from "../components/Toggle";
+import { api } from "../lib/ipc";
 import { cn } from "../lib/cn";
-import type { Intent } from "../lib/types";
+import type { Intent, LinkState } from "../lib/types";
 import { useShell } from "../store/shell";
 
 const GENRES = [
@@ -36,8 +37,28 @@ export function SettingsPanel() {
   const go = useShell((state) => state.go);
   const bootFailed = useShell((state) => state.bootFailed);
 
+  useEffect(() => {
+    void api
+      .linkState()
+      .then(setLink)
+      .catch(() => setLink(null));
+  }, []);
+
+  const toggleLink = async () => {
+    setLinkBusy(true);
+    try {
+      setLink(link?.ours ? await api.linkUnregister() : await api.linkRegister());
+    } catch {
+      // The row keeps saying what it said: a failed write must not look like a state.
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
   const [name, setName] = useState(settings?.identity.name ?? "");
   const [confirming, setConfirming] = useState(false);
+  const [link, setLink] = useState<LinkState | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
 
   useEffect(() => {
     setName(settings?.identity.name ?? "");
@@ -254,6 +275,34 @@ export function SettingsPanel() {
                 Open
               </button>
             </Row>
+          </Section>
+
+          <Section title="Links">
+            <Row
+              label="kuro:// links"
+              hint={
+                link?.ours
+                  ? "Registered for this build. A link carries a place, one exact server and an account, so a friend's link lands where they were."
+                  : "Points the kuro:// scheme at this app, so a party link opens here. It is written in your own user account, and the same button removes it."
+              }
+            >
+              <button
+                type="button"
+                onClick={() => void toggleLink()}
+                disabled={linkBusy || link === null}
+                className="ui h-7 shrink-0 rounded-control border border-white/10 px-2.5 text-[12px] text-body hover:border-white/20 hover:bg-white/5 disabled:opacity-50"
+              >
+                {linkBusy ? "Writing" : link?.ours ? "Remove" : "Register"}
+              </button>
+            </Row>
+
+            {link && !link.ours && link.command ? (
+              <p className="px-3.5 py-2 text-[11px] leading-[1.55] text-muted">
+                Windows currently opens kuro:// with{" "}
+                <span className="num">{link.command}</span>. Registering replaces that with
+                this build.
+              </p>
+            ) : null}
           </Section>
 
           <Section title="Advanced">

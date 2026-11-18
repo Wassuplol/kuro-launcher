@@ -37,6 +37,7 @@ export function LaunchBody() {
   const [done, setDone] = useState<Launched | null>(null);
   const [account, setAccount] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -48,8 +49,10 @@ export function LaunchBody() {
     // client. The read below picks it up on the same pass, so the page arrives
     // already knowing what it would run.
     const pending = useShell.getState().pending;
+    const pendingAccount = useShell.getState().pendingAccount;
     if (pending) {
       setTarget(pending);
+      if (pendingAccount != null) setAccount(pendingAccount);
       useShell.getState().clearPending();
     }
     // The field is the point of this page, so it takes focus. Unless something
@@ -114,6 +117,27 @@ export function LaunchBody() {
       mode: launched.mode,
       account: accountId,
     });
+  };
+
+  // A party link is the launch, written down: the place, and the account that would
+  // open it. The exact server comes from a receipt, because a fresh launch does not
+  // know its job id until the client has joined one.
+  const copyParty = async (
+    key: string,
+    place: number | null,
+    server: string | null,
+    account: number | null,
+  ) => {
+    const url = await api.linkFor(place, server, account).catch(() => null);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(key);
+      window.setTimeout(() => setCopied((current) => (current === key ? null : current)), 2000);
+    } catch {
+      // A clipboard that refuses is worth saying out loud, with the link in reach.
+      setLaunchProblem({ message: `The clipboard refused the copy. The link is ${url}` });
+    }
   };
 
   const play = async () => {
@@ -259,13 +283,23 @@ export function LaunchBody() {
           )}
 
           {done ? (
-            <p className="mt-2 text-[11px] leading-[1.55] text-body">
-              {done.detail}
-              <span className="ml-1 text-muted">
-                {done.client}
-                {done.version ? ` · ${done.version}` : ""}
-              </span>
-            </p>
+            <div className="mt-2 flex items-start justify-between gap-2">
+              <p className="text-[11px] leading-[1.55] text-body">
+                {done.detail}
+                <span className="ml-1 text-muted">
+                  {done.client}
+                  {done.version ? ` · ${done.version}` : ""}
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() => void copyParty("launch", done.place, null, chosen?.userId ?? null)}
+                title="A kuro:// link that opens this game as this account"
+                className="ui h-6 shrink-0 rounded-control border border-white/10 px-2 text-[11px] text-muted hover:border-white/20 hover:text-body"
+              >
+                {copied === "launch" ? "Copied" : "Copy party link"}
+              </button>
+            </div>
           ) : (
             <p className="mt-2 text-[11px] leading-[1.55] text-muted">
               {chosen

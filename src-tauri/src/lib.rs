@@ -8,6 +8,7 @@ pub mod identity;
 pub mod launch;
 pub mod ledger;
 pub mod library;
+pub mod links;
 pub mod profiles;
 pub mod receipts;
 pub mod settings;
@@ -45,6 +46,9 @@ pub struct AppState {
     /// The per-class request allowance and the answers kept between paints.
     pub budget: std::sync::Arc<discovery::Budget>,
     pub cache: std::sync::Arc<discovery::Cache>,
+    /// A `kuro://` link waiting to be read by the page. Windows hands one over as a
+    /// command-line argument, and a second launch hands it to the running process.
+    pub pending_link: Mutex<Option<links::Party>>,
     /// Set once the page has taken control of the window. Until then the window
     /// stays hidden, so nothing full-size is ever painted before the opening.
     pub opened: Arc<AtomicBool>,
@@ -813,6 +817,81 @@ async fn profiles_launch(
     }
 
     Ok(launched)
+}
+
+// ---- party links ----
+
+/// Whether `kuro://` points at this build, and where it points if not.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkState {
+    /// The command Windows would run for `kuro://`, when the scheme is registered.
+    pub command: Option<String>,
+    /// Whether that command runs this executable.
+    pub ours: bool,
+    pub exe: String,
+}
+
+fn link_state_now() -> LinkState {
+    let exe = std::env::current_exe()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let command = links::state(links::SCHEME);
+    let ours = match &command {
+        Some(command) => command
+            .trim_start_matches('"')
+            .split('"')
+            .next()
+            .map(|first| first.eq_ignore_ascii_case(&exe))
+            .unwrap_or(false),
+        None => false,
+    };
+
+    LinkState { command, ours, exe }
+}
+
+#[tauri::command]
+fn link_state() -> LinkState {
+    link_state_now()
+}
+
+/// Registers `kuro://` for the executable that is running now, so a moved folder or a
+/// newer build re-registers instead of leaving a link pointing at an older file.
+#[tauri::command]
+fn link_register() -> Result<LinkState, LaunchError> {
+    let exe = std::env::current_exe().map_err(|e| {
+        LaunchError::new(
+            FailureCode::Internal,
+            format!("This build does not know where it lives: {e}"),
+        )
+    })?;
+    links::register(links::SCHEME, &exe)?;
+    Ok(link_state_now())
+}
+
+#[tauri::command]
+fn link_unregister() -> Result<LinkState, LaunchError> {
+    links::unregister(links::SCHEME)?;
+    Ok(link_state_now())
+}
+
+/// The link waiting for the page, taken rather than read: a link is one launch, not a
+/// state the app keeps returning to.
+#[tauri::command]
+fn link_take(state: State<'_, AppState>) -> Result<Option<links::Party>, LaunchError> {
+    let mut slot = state.pending_link.lock().map_err(|_| poisoned())?;
+    Ok(slot.take())
+}
+
+/// The text for a party link, so the shape is written in one place and the page only
+/// copies it.
+#[tauri::command]
+fn link_for(place: Option<u64>, server: Option<String>, account: Option<u64>) -> Option<String> {
+    links::url_for(&links::Party {
+        place,
+        server,
+        account,
+    })
 }
 
 /// Turns the multi-instance lock on or off and remembers the answer.
@@ -2029,11 +2108,23 @@ async fn supply_repair(
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
+            }
+
+            // A `kuro://` link that opened a second copy of the app belongs to the copy
+            // that is already running. It is handed over rather than dropped, and the
+            // event tells the page to read it.
+            if let Some(party) = links::from_args(&args) {
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Ok(mut slot) = state.pending_link.lock() {
+                        *slot = Some(party);
+                    }
+                }
+                let _ = app.emit("link", ());
             }
         }))
         // Size and position are restored; visibility is not. The plugin saves
@@ -2105,6 +2196,12 @@ pub fn run() {
             // crash path real rather than aspirational.
             let recovered = flags::apply::revert(&root).ok().flatten();
 
+            // A link that started this process arrives as a command-line argument, and
+            // is held here until the page asks for it. Nothing is launched on the
+            // strength of a link alone: the page shows what it would open first.
+            let args: Vec<String> = std::env::args().collect();
+            let pending_link = links::from_args(&args);
+
             app.manage(AppState {
                 data_root: root,
                 settings: Mutex::new(loaded),
@@ -2112,6 +2209,7 @@ pub fn run() {
                 singleton: Mutex::new(singleton),
                 recovered: Mutex::new(recovered),
                 supply: SupplyState::default(),
+                pending_link: Mutex::new(pending_link),
                 budget: std::sync::Arc::new(discovery::Budget::default()),
                 cache: std::sync::Arc::new(discovery::Cache::default()),
                 opened,
@@ -2140,6 +2238,11 @@ pub fn run() {
             launch_start,
             launch_multi_instance,
             launch_state,
+            link_state,
+            link_register,
+            link_unregister,
+            link_take,
+            link_for,
             profiles_list,
             profiles_save,
             profiles_delete,

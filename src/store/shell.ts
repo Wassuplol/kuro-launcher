@@ -18,6 +18,8 @@ type ShellState = {
   page: Page;
   /** A place a grid sent to the Launch page, consumed there once. */
   pending: string | null;
+  /** The account a link named, applied by the Launch page once. */
+  pendingAccount: number | null;
   /** The game the detail page is showing, put there by the tile that opened it. */
   game: { universe: number; place: number } | null;
   paletteOpen: boolean;
@@ -28,7 +30,9 @@ type ShellState = {
 
   boot: () => Promise<void>;
   go: (page: Page) => void;
-  prefill: (target: string) => void;
+  prefill: (target: string, account?: number | null) => void;
+  /** Reads a `kuro://` link the backend is holding, and opens the Launch page on it. */
+  readLink: () => Promise<void>;
   clearPending: () => void;
   openGame: (universe: number, place: number) => void;
   openPalette: () => void;
@@ -51,6 +55,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   bootFailed: false,
   page: pageFromHash(window.location.hash),
   pending: null,
+  pendingAccount: null,
   game: null,
   paletteOpen: false,
   settingsOpen: false,
@@ -83,12 +88,29 @@ export const useShell = create<ShellState>()((set, get) => ({
     set({ page, paletteOpen: false, settingsOpen: false });
   },
 
-  prefill: (target) => {
+  prefill: (target, account = null) => {
     reflect("launch");
-    set({ pending: target, page: "launch", paletteOpen: false, settingsOpen: false });
+    set({ pending: target, pendingAccount: account, page: "launch", paletteOpen: false, settingsOpen: false });
   },
 
-  clearPending: () => set({ pending: null }),
+  readLink: async () => {
+    const party = await api.linkTake().catch(() => null);
+    if (!party) return;
+
+    // A job id without a place is not a destination: the launch path parses a place and
+    // an instance together, and nothing else here guesses.
+    const target =
+      party.place && party.server
+        ? `roblox://placeId=${party.place}&gameInstanceId=${party.server}`
+        : party.place
+          ? String(party.place)
+          : null;
+    if (!target) return;
+
+    get().prefill(target, party.account);
+  },
+
+  clearPending: () => set({ pending: null, pendingAccount: null }),
 
   openGame: (universe, place) => {
     reflect("game");

@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import { Toaster } from "sonner";
 
@@ -40,6 +41,18 @@ export function App() {
     void api.windowOpen(520, 360).catch(() => undefined);
     void boot();
   }, [boot]);
+
+  // A `kuro://` link arrives as a command-line argument, either before this page exists
+  // or by waking the copy that is already running. Both end up in the same place: the
+  // Launch page, with the destination already in the field.
+  useEffect(() => {
+    if (!ready) return;
+    void useShell.getState().readLink();
+    const stop = listen("link", () => void useShell.getState().readLink());
+    return () => {
+      void stop.then((unlisten) => unlisten());
+    };
+  }, [ready]);
 
   useEffect(() => {
     if (!ready || !target || decided.current) return;
