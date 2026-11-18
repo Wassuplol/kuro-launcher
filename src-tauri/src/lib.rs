@@ -6,6 +6,7 @@ pub mod identity;
 pub mod launch;
 pub mod library;
 pub mod settings;
+pub mod social;
 pub mod supply;
 
 use std::path::PathBuf;
@@ -1050,6 +1051,38 @@ fn library_clear(state: State<'_, AppState>) -> Result<library::Log, LaunchError
     library::clear(&state.data_root)
 }
 
+/// The friend list with names, faces and live presence.
+///
+/// Needs the session for the list itself; presence is anonymous. The list is cached
+/// for two minutes because it allows twenty calls a minute, and presence is not cached
+/// because it is the only part that changes.
+#[tauri::command]
+async fn friends_roster(state: State<'_, AppState>) -> Result<social::Roster, LaunchError> {
+    let root = state.data_root.clone();
+    let chosen = identity::load(&root)
+        .ok()
+        .and_then(|store| {
+            store
+                .default
+                .or_else(|| store.accounts.first().map(|a| a.user_id))
+        })
+        .ok_or_else(|| {
+            LaunchError::new(
+                FailureCode::SessionExpired,
+                "The friend list belongs to an account and this machine has none.",
+            )
+            .with_action("Add an account")
+        })?;
+
+    let cookie = identity::cookie_for(&root, chosen)?;
+    let budget = state.budget.clone();
+    let cache = state.cache.clone();
+
+    tauri::async_runtime::spawn_blocking(move || social::roster(&budget, &cache, &cookie, chosen))
+        .await
+        .map_err(|e| worker_failed(format!("The friend list was not read: {e}")))?
+}
+
 /// What is left of each allowance, so a screen can say why a button is waiting.
 #[tauri::command]
 fn discovery_budget(state: State<'_, AppState>) -> Vec<(String, usize, usize)> {
@@ -1060,6 +1093,8 @@ fn discovery_budget(state: State<'_, AppState>) -> Vec<(String, usize, usize)> {
         discovery::Class::Servers,
         discovery::Class::Thumbs,
         discovery::Class::Library,
+        discovery::Class::Friends,
+        discovery::Class::Presence,
     ])
 }
 
@@ -1458,6 +1493,7 @@ pub fn run() {
             library_recent,
             library_record,
             library_clear,
+            friends_roster,
             flags_view,
             flags_refresh,
             flags_search,

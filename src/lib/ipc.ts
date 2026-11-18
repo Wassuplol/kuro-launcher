@@ -23,6 +23,7 @@ import type {
   Played,
   PrunePlan,
   PruneResult,
+  Roster,
   QuickLoginAttempt,
   QuickLoginPoll,
   Settings,
@@ -153,6 +154,9 @@ export const api = {
   libraryRecent: () => call<PlayLog>("library_recent"),
   libraryRecord: (entry: Omit<Played, "at">) => call<PlayLog>("library_record", { entry }),
   libraryClear: () => call<PlayLog>("library_clear"),
+
+  /** The friend list with names, faces and live presence. Needs an account. */
+  friendsRoster: () => call<Roster>("friends_roster"),
 
   flagsView: () => call<FlagsView>("flags_view"),
   flagsRefresh: () => call<FlagCatalog>("flags_refresh"),

@@ -57,6 +57,9 @@ pub enum Class {
     Servers,
     Thumbs,
     Library,
+    Friends,
+    Presence,
+    Users,
 }
 
 impl Class {
@@ -73,6 +76,14 @@ impl Class {
             Class::Thumbs => 500,
             // Measured on `favorite/games`: `x-ratelimit-limit: 200, 200;w=60`.
             Class::Library => 200,
+            // Measured on `friends`: `x-ratelimit-limit: 20, 20;w=60, 20;w=60`. The
+            // tightest budget in the app, tighter than search, which is why the friend
+            // list is cached for two minutes and only presence is asked again.
+            Class::Friends => 20,
+            // Measured on `presence/users`: `60, 60;w=60, 100;w=60`.
+            Class::Presence => 60,
+            // Measured on `users` (POST, the name hydrator): `100, 1000;w=1`.
+            Class::Users => 600,
         }
     }
 
@@ -84,6 +95,9 @@ impl Class {
             Class::Servers => "the server list",
             Class::Thumbs => "thumbnails",
             Class::Library => "your favourites",
+            Class::Friends => "your friend list",
+            Class::Presence => "presence",
+            Class::Users => "names",
         }
     }
 }
@@ -102,7 +116,7 @@ impl Budget {
     /// Spends one allowance, or explains why not. The refusal is local and costs
     /// nothing: it is what keeps a rate-limited endpoint from being hammered into
     /// a longer ban.
-    fn spend(&self, class: Class) -> Result<(), LaunchError> {
+    pub(crate) fn spend(&self, class: Class) -> Result<(), LaunchError> {
         let window = Duration::from_secs(60);
         let mut guard = self.calls.lock().map_err(|_| {
             LaunchError::new(FailureCode::Internal, "The request budget was poisoned.")
@@ -160,7 +174,7 @@ pub struct Cache {
 }
 
 impl Cache {
-    fn get(&self, key: &str) -> Option<String> {
+    pub(crate) fn get(&self, key: &str) -> Option<String> {
         let guard = self.entries.lock().ok()?;
         let (expires, value) = guard.get(key)?;
         if expires.elapsed() > Duration::ZERO {
@@ -169,7 +183,7 @@ impl Cache {
         Some(value.clone())
     }
 
-    fn put(&self, key: &str, value: &str, ttl: Duration) {
+    pub(crate) fn put(&self, key: &str, value: &str, ttl: Duration) {
         if let Ok(mut guard) = self.entries.lock() {
             guard.insert(key.to_string(), (Instant::now() + ttl, value.to_string()));
         }

@@ -290,6 +290,35 @@ export type ImportedFlags = {
 };
 
 /** One game in a grid. `place` is what a launch needs; `universe` is the id. */
+/** What one friend is doing: 0 offline, 1 online, 2 in a game, 3 in Studio. */
+export type Presence = {
+  kind: number;
+  label: string;
+  place: number | null;
+  universe: number | null;
+  /** The exact server, when they are in one. */
+  server: string | null;
+};
+
+export type Friend = {
+  user: number;
+  name: string;
+  display: string;
+  verified: boolean;
+  headshot: string | null;
+  presence: Presence;
+};
+
+export type Roster = {
+  friends: Friend[];
+  inGame: number;
+  online: number;
+  offline: number;
+  fetched: number;
+  cached: boolean;
+  note?: string;
+};
+
 /** One page of Roblox favourites, as the Library draws it. */
 export type Shelf = {
   games: GameCard[];
