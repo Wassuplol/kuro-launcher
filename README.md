@@ -24,6 +24,15 @@ games Roblox is serving, with a launch that lands where you pointed it.
 Everything here talks to Roblox's own endpoints with your own session. There is no
 KURO server, no account to create, and nothing to sign up for.
 
+## Get it
+
+Windows 10 and 11, x64. The installers and a portable exe are on the
+[releases page](https://github.com/Wassuplol/kuro-launcher/releases/latest).
+
+The builds are unsigned, so Windows warns once before the installer runs. Every file
+on a release has its SHA-256 in `SHA256SUMS.txt` beside it: put the files in one
+folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
+
 ## What works today
 
 | Works | Notes |
@@ -39,6 +48,7 @@ KURO server, no account to create, and nothing to sign up for.
 | **Versions** | Discover across both install roots, direct install with hash and signature checks, pin, prune, verify, repair |
 | **Flags** | Roblox's own 25,585-key catalogue, named profiles, a per-flag scope chain, and a write you can undo |
 | **Shell** | Eight pages, a command palette, settings, named failures with a code, a cause and an action |
+| **Install** | NSIS and MSI installers and a portable exe, built by CI on a tag, with SHA-256 for every file |
 
 <p align="center">
   <img src="assets/search.webp" alt="Search results for tower defense, rendered from Roblox's index" width="100%">
@@ -58,8 +68,10 @@ KURO server, no account to create, and nothing to sign up for.
 
 ## What is not built
 
-Still missing: a release pipeline. The table above has no entry for it because it does
-not exist yet, not because it is hiding.
+| Missing | Why it is not here |
+|---|---|
+| A signed installer | No code-signing certificate, so SmartScreen warns once on first run. The hashes are the substitute: check them before you run anything |
+| An updater | The app never phones home for anything but Roblox, so an update is a download, not a push |
 
 ## Three things this app had to measure, not assume
 
