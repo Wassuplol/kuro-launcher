@@ -36,13 +36,26 @@ type Totals = {
   missed: number;
 };
 
+/**
+ * Time in a game, not time with a client open.
+ *
+ * A prewarm or tray client can sit for hours before it joins anything, and the log's
+ * length covers all of it. The join line says how far into the log the client was when
+ * a server answered, so "time in game" starts there.
+ */
+function playedSeconds(receipt: Receipt): number {
+  // The backend measured this from the join line to the last line in the file. A tray
+  // client that prewarmed for three hours and played for four minutes counts as four.
+  return receipt.playedSeconds;
+}
+
 function summarize(receipts: Receipt[]): Totals {
   return receipts.reduce<Totals>(
     (sum, receipt) => {
       sum.count += 1;
       if (receipt.handshake) {
         sum.reached += 1;
-        sum.seconds += receipt.seconds;
+        sum.seconds += playedSeconds(receipt);
       } else {
         sum.missed += 1;
       }
@@ -324,7 +337,7 @@ function Played({ receipts }: { receipts: Receipt[] }) {
         seconds: 0,
         sessions: 0,
       };
-      entry.seconds += receipt.seconds;
+      entry.seconds += playedSeconds(receipt);
       entry.sessions += 1;
       byPlace.set(place, entry);
     }
@@ -350,7 +363,7 @@ function Played({ receipts }: { receipts: Receipt[] }) {
       });
       if (slot >= 0) {
         const bucket = buckets[slot];
-        if (bucket) bucket.seconds += receipt.seconds;
+        if (bucket) bucket.seconds += playedSeconds(receipt);
       }
     }
     return buckets;

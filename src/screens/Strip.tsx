@@ -61,7 +61,10 @@ export function Strip() {
 
   const title = state?.place != null ? (state.name ?? `Place ${state.place}`) : running ? "Client running" : "No session";
   const elapsed = live ? clock(seconds) : running ? "…" : "idle";
-  const detail = state?.ping != null ? `${state.ping} ms` : (state?.note ?? null);
+  // The join time is the only latency the log actually measures. A TCP probe against
+  // the game port always timed out, because Roblox servers do not listen on it.
+  const detail =
+    state?.joinMs != null ? `joined in ${(state.joinMs / 1000).toFixed(1)} s` : (state?.note ?? null);
 
   return (
     <div
@@ -77,7 +80,7 @@ export function Strip() {
         </div>
 
         <div data-tauri-drag-region className="flex items-center gap-2 text-[10.5px] leading-none text-muted">
-          <span className={state?.ping != null ? "num shrink-0 text-body" : "truncate"}>
+          <span className={state?.joinMs != null ? "num shrink-0 text-body" : "truncate"}>
             {detail ?? (running ? "reading the log" : "this fills in while a game runs")}
           </span>
           {state?.endpoint ? <span className="num shrink-0">{state.endpoint}</span> : null}

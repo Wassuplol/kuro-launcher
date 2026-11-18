@@ -82,6 +82,15 @@ pub struct Receipt {
     pub endpoint: Option<String>,
     /// Seconds from process start to the join completing, when the client said so.
     pub join_seconds: Option<u64>,
+    /// Seconds between the join line and the last line the client wrote.
+    ///
+    /// This is the only honest answer to "how long was this person in a game". The
+    /// client prewarms in the tray, and one log can start hours before it joins, so the
+    /// length of the file is not play time. Zero when no server was ever reached.
+    pub played_seconds: u64,
+    /// The same join, in milliseconds. The client's own number is a float, and a
+    /// healthy join is under a second, so the strip needs more than whole seconds.
+    pub join_ms: Option<u64>,
     pub handshake: bool,
     pub adapter: Option<String>,
     pub api: Option<String>,
@@ -231,13 +240,13 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
     let text = String::from_utf8_lossy(&raw);
 
     let mut lines = 0u64;
-    let mut seconds = 0u64;
     let mut place = None;
     let mut universe = None;
     let mut job = None;
     let mut server = None;
     let mut endpoint = None;
-    let mut join_seconds = None;
+    let mut join_ms: Option<u64> = None;
+    let mut join_seconds: Option<u64> = None;
     let mut handshake = false;
     let mut adapter = None;
     let mut adapters: Vec<Adapter> = Vec::new();
@@ -248,13 +257,21 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
     let mut last_http = None;
     let mut crash = false;
 
+    let mut first_stamp: Option<i64> = None;
+    let mut last_stamp: Option<i64> = None;
+    let mut joined_stamp: Option<i64> = None;
+
     for line in text.lines() {
         lines += 1;
-        if let Some(rel) = relative_seconds(line) {
-            seconds = seconds.max(rel);
+        if let Some(stamp) = line_stamp(line) {
+            first_stamp.get_or_insert(stamp);
+            last_stamp = Some(stamp);
         }
 
         if let Some(start) = line.find("! Joining game '") {
+            // The join line's own stamp is when play started, whatever the client was
+            // doing before it.
+            joined_stamp = joined_stamp.or_else(|| line_stamp(line));
             let rest = &line[start + "! Joining game '".len()..];
             if let Some(end) = rest.find('\'') {
                 job = Some(rest[..end].to_string());
@@ -284,10 +301,14 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
                 let end = rest
                     .find(|c: char| !c.is_ascii_digit() && c != '.')
                     .unwrap_or(rest.len());
-                join_seconds = rest[..end]
+                // Milliseconds, because a healthy join takes under a second: the client
+                // writes a float here, and rounding it to whole seconds turned every fast
+                // join into zero, which is a number nobody can show.
+                join_ms = rest[..end]
                     .parse::<f64>()
                     .ok()
-                    .map(|value| value.round() as u64);
+                    .map(|value| (value * 1000.0).round() as u64);
+                join_seconds = join_ms.map(|ms| (ms + 500) / 1000);
             }
         }
 
@@ -403,7 +424,23 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
         }
     }
 
-    let seconds = seconds.max(join_seconds.unwrap_or(0));
+    // Wall clock from the log's own stamps. The comma field that used to be read here is
+    // not seconds since this log started: Roblox writes lines from more than one clock
+    // into the same file, and a twenty minute session carried values over 9,000 there.
+    let seconds = match (first_stamp, last_stamp) {
+        (Some(first), Some(last)) => (last - first).max(0) as u64,
+        _ => 0,
+    }
+    .max(join_seconds.unwrap_or(0));
+
+    let played_seconds = if handshake {
+        match (joined_stamp, last_stamp) {
+            (Some(joined), Some(last)) => (last - joined).max(0) as u64,
+            _ => 0,
+        }
+    } else {
+        0
+    };
     let outcome = if crash {
         Outcome::Crashed
     } else if handshake {
@@ -465,6 +502,8 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
         server,
         endpoint,
         join_seconds,
+        join_ms,
+        played_seconds,
         handshake,
         adapter,
         api,
@@ -527,11 +566,25 @@ fn is_endpoint(token: &str) -> bool {
 }
 
 /// The relative-seconds field every log line carries as its second column.
-fn relative_seconds(line: &str) -> Option<u64> {
-    let mut parts = line.split(',');
-    parts.next()?;
-    let field = parts.next()?;
-    field.parse::<f64>().ok().map(|value| value.round() as u64)
+/// The ISO stamp every line starts with, as seconds since the epoch.
+///
+/// `2026-11-18T20:15:33.957Z,13.9,...` The stamp is the only field in a Roblox log that
+/// means the same thing on every line, which is why the session's length is measured
+/// between the first and the last of them.
+fn line_stamp(line: &str) -> Option<i64> {
+    let head = line.get(..20)?;
+    if head.as_bytes().get(10) != Some(&b'T') {
+        return None;
+    }
+
+    let year: i64 = head.get(0..4)?.parse().ok()?;
+    let month: i64 = head.get(5..7)?.parse().ok()?;
+    let day: i64 = head.get(8..10)?.parse().ok()?;
+    let hour: i64 = head.get(11..13)?.parse().ok()?;
+    let minute: i64 = head.get(14..16)?.parse().ok()?;
+    let second: i64 = head.get(17..19)?.parse().ok()?;
+
+    Some(days_from_civil(year, month, day) * 86_400 + hour * 3_600 + minute * 60 + second)
 }
 
 /// The UTC stamp in `0.748.0.7481526_20261118T162027Z_Player_4DADF_last.log`.

@@ -57,6 +57,15 @@ impl Default for Store {
     }
 }
 
+/// Time in a game, not time with a client open.
+///
+/// The client prewarms in the tray, and a log can start hours before it joins anything,
+/// so the length of the file is not play time. The receipt measures from the join line to
+/// the last line the client wrote, and a session that never reached a server has none.
+pub fn played_seconds(receipt: &Receipt) -> u64 {
+    receipt.played_seconds
+}
+
 fn path(root: &Path) -> PathBuf {
     root.join(STORE)
 }
@@ -120,10 +129,13 @@ pub fn absorb(root: &Path, receipts: &[Receipt]) -> Result<usize, LaunchError> {
             .find(|entry| entry.id == receipt.id)
         {
             Some(entry) => {
-                // A session absorbed while it was still running has no length yet, and
-                // the log that closes it is the one that knows how long it lasted.
-                if receipt.handshake && receipt.seconds > entry.seconds {
-                    entry.seconds = receipt.seconds;
+                // The log grows while the client runs, so this is the same session seen
+                // again, not a longer one. What is stored is time in a game: a prewarm
+                // client can sit in the tray for hours before it joins anything, and the
+                // join line is where the clock starts.
+                let played = played_seconds(receipt);
+                if receipt.handshake && played != entry.seconds {
+                    entry.seconds = played;
                     changed = true;
                 }
                 if entry.name.is_none() {
@@ -143,11 +155,7 @@ pub fn absorb(root: &Path, receipts: &[Receipt]) -> Result<usize, LaunchError> {
                     place: receipt.place,
                     name: receipt.name.clone(),
                     started: receipt.started,
-                    seconds: if receipt.handshake {
-                        receipt.seconds
-                    } else {
-                        0
-                    },
+                    seconds: played_seconds(receipt),
                     reached: receipt.handshake,
                 });
                 added += 1;
@@ -384,6 +392,22 @@ mod tests {
     use super::*;
     use crate::receipts::Outcome;
 
+    /// Time in a game starts at the join, not at the process.
+    ///
+    /// A tray client logged 12,773 seconds once, joined at 12,522 and played for about
+    /// four minutes. Counting the whole log made that session the third most played
+    /// thing in this ledger's history.
+    #[test]
+    fn a_prewarm_client_does_not_bank_play_time() {
+        // 12,773 seconds from start to last line, but the join line came at 12,522.
+        let mut long = receipt("log-a", 1_700_000_000, 12_773, true);
+        long.played_seconds = 251;
+        assert_eq!(played_seconds(&long), 251);
+
+        let never = receipt("log-b", 1_700_000_000, 9_000, false);
+        assert_eq!(played_seconds(&never), 0);
+    }
+
     fn receipt(id: &str, started: u64, seconds: u64, reached: bool) -> Receipt {
         Receipt {
             id: id.to_string(),
@@ -396,7 +420,9 @@ mod tests {
             job: None,
             server: None,
             endpoint: None,
-            join_seconds: None,
+            join_seconds: Some(0),
+            join_ms: None,
+            played_seconds: if reached { seconds } else { 0 },
             handshake: reached,
             adapter: None,
             api: None,

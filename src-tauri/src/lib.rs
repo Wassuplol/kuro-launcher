@@ -1144,32 +1144,14 @@ pub struct StripState {
     pub account: Option<String>,
     /// The client's own clock at the last read, in seconds.
     pub seconds: u64,
-    /// One round trip to the server, in milliseconds.
-    pub ping: Option<u32>,
-    /// Why there is no number, said once instead of left blank.
+    /// Milliseconds from process start to the join completing, when the client said so.
+    ///
+    /// This is the only real latency number the log offers. A TCP handshake to the game
+    /// port was tried instead and it never answers: Roblox takes game traffic over UDP,
+    /// so a connect attempt was measuring the absence of a service, not the distance.
+    pub join_ms: Option<u64>,
+    /// Why there is nothing to measure yet, said once instead of left blank.
     pub note: Option<String>,
-}
-
-/// One round trip to the server, measured by opening and closing a connection.
-///
-/// This is the quantity a ping shows: time out, answer, time back. A TCP handshake is
-/// used rather than ICMP because the port is the thing being measured, and Roblox's
-/// edge answers it while often dropping echo requests. Nothing is sent to the server:
-/// a connection that is closed immediately is a measurement, not a request.
-fn round_trip(endpoint: &str) -> Result<u32, String> {
-    use std::net::{TcpStream, ToSocketAddrs};
-
-    let address = endpoint
-        .to_socket_addrs()
-        .map_err(|_| "that address did not resolve".to_string())?
-        .next()
-        .ok_or_else(|| "that address resolved to nothing".to_string())?;
-
-    let started = std::time::Instant::now();
-    TcpStream::connect_timeout(&address, std::time::Duration::from_millis(700))
-        .map_err(|_| "the server did not answer a connection".to_string())?;
-    let millis = started.elapsed().as_millis();
-    Ok(millis.min(u32::MAX as u128) as u32)
 }
 
 #[tauri::command]
@@ -1193,26 +1175,20 @@ async fn strip_state(state: State<'_, AppState>) -> Result<StripState, LaunchErr
         let endpoint = session
             .as_ref()
             .and_then(|receipt| receipt.endpoint.clone());
-        let (ping, note) = if !running {
-            (None, None)
+        let join_ms = session.as_ref().and_then(|receipt| receipt.join_ms);
+        let note = if !running {
+            None
         } else {
             match &endpoint {
-                Some(endpoint) => match round_trip(endpoint) {
-                    Ok(millis) => (Some(millis), None),
-                    Err(why) => (None, Some(why)),
-                },
+                Some(_) => None,
                 // Two different silences, and which one it is matters: a client that has
                 // not joined yet is normal for ten seconds and a problem after five
                 // minutes, while a client whose newest log belongs to an earlier launch
                 // has not written anything about this one at all.
-                None if session.is_none() => (
-                    None,
-                    Some("its newest log is from an earlier launch".to_string()),
-                ),
-                None => (
-                    None,
-                    Some("the client has not reached a server yet".to_string()),
-                ),
+                None if session.is_none() => {
+                    Some("its newest log is from an earlier launch".to_string())
+                }
+                None => Some("the client has not reached a server yet".to_string()),
             }
         };
 
@@ -1223,7 +1199,7 @@ async fn strip_state(state: State<'_, AppState>) -> Result<StripState, LaunchErr
             endpoint,
             account,
             seconds: session.as_ref().map(|receipt| receipt.seconds).unwrap_or(0),
-            ping,
+            join_ms,
             note,
         })
     })
@@ -2371,28 +2347,4 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("the launcher window failed to start");
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The ping the strip shows, measured against a host that always answers.
-    ///
-    /// Ignored by default so a machine without a network is not a failing test; run
-    /// it with `cargo test --lib -- --ignored` when the path needs proving.
-    #[test]
-    #[ignore = "network: needs a host that answers"]
-    fn a_round_trip_reads_as_milliseconds() {
-        let millis = round_trip("1.1.1.1:443").expect("a public host answers");
-        assert!(
-            millis < 2000,
-            "a round trip took {millis} ms, which is not plausible"
-        );
-    }
-
-    #[test]
-    fn a_target_that_is_not_an_endpoint_is_refused_rather_than_guessed_at() {
-        assert!(round_trip("not-an-address").is_err());
-    }
 }

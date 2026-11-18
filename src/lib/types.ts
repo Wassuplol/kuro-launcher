@@ -280,8 +280,9 @@ export type StripState = {
   account: string | null;
   /** The client's own clock at the last read, in seconds. */
   seconds: number;
-  ping: number | null;
-  /** Why there is no ping number, said once instead of left blank. */
+  /** How long the client took to reach a server, in milliseconds. */
+  joinMs: number | null;
+  /** Why there is nothing to show yet, said once instead of left blank. */
   note: string | null;
 };
 
@@ -597,6 +598,9 @@ export type Receipt = {
   /** `<ip>:<port>` from the handshake line: the server that answered. */
   endpoint: string | null;
   joinSeconds: number | null;
+  joinMs: number | null;
+  /** Seconds between the join line and the last line the client wrote. */
+  playedSeconds: number;
   handshake: boolean;
   adapter: string | null;
   api: string | null;
