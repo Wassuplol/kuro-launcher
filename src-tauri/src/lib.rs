@@ -984,6 +984,148 @@ async fn gpu_pin(state: State<'_, AppState>, on: bool) -> Result<GpuPin, LaunchE
     Ok(pin)
 }
 
+// ---- the in-game strip ----
+
+/// What the strip shows: the session in progress, and how far away its server is.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StripState {
+    /// A client process is running right now.
+    pub running: bool,
+    pub place: Option<u64>,
+    pub name: Option<String>,
+    /// `<ip>:<port>` from the handshake line, once one has happened.
+    pub endpoint: Option<String>,
+    pub account: Option<String>,
+    /// The client's own clock at the last read, in seconds.
+    pub seconds: u64,
+    /// One round trip to the server, in milliseconds.
+    pub ping: Option<u32>,
+    /// Why there is no number, said once instead of left blank.
+    pub note: Option<String>,
+}
+
+/// One round trip to the server, measured by opening and closing a connection.
+///
+/// This is the quantity a ping shows: time out, answer, time back. A TCP handshake is
+/// used rather than ICMP because the port is the thing being measured, and Roblox's
+/// edge answers it while often dropping echo requests. Nothing is sent to the server:
+/// a connection that is closed immediately is a measurement, not a request.
+fn round_trip(endpoint: &str) -> Result<u32, String> {
+    use std::net::{TcpStream, ToSocketAddrs};
+
+    let address = endpoint
+        .to_socket_addrs()
+        .map_err(|_| "that address did not resolve".to_string())?
+        .next()
+        .ok_or_else(|| "that address resolved to nothing".to_string())?;
+
+    let started = std::time::Instant::now();
+    TcpStream::connect_timeout(&address, std::time::Duration::from_millis(700))
+        .map_err(|_| "the server did not answer a connection".to_string())?;
+    let millis = started.elapsed().as_millis();
+    Ok(millis.min(u32::MAX as u128) as u32)
+}
+
+#[tauri::command]
+async fn strip_state(state: State<'_, AppState>) -> Result<StripState, LaunchError> {
+    let root = state.data_root.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let running = launch::spawn::player_running();
+        let session = receipts::live(&root);
+
+        let account = identity::load(&root).ok().and_then(|store| {
+            store.last_used.or(store.default).and_then(|id| {
+                store
+                    .accounts
+                    .iter()
+                    .find(|account| account.user_id == id)
+                    .map(|account| account.display.clone())
+            })
+        });
+
+        let endpoint = session
+            .as_ref()
+            .and_then(|receipt| receipt.endpoint.clone());
+        let (ping, note) = if !running {
+            (None, None)
+        } else {
+            match &endpoint {
+                Some(endpoint) => match round_trip(endpoint) {
+                    Ok(millis) => (Some(millis), None),
+                    Err(why) => (None, Some(why)),
+                },
+                // Two different silences, and which one it is matters: a client that has
+                // not joined yet is normal for ten seconds and a problem after five
+                // minutes, while a client whose newest log belongs to an earlier launch
+                // has not written anything about this one at all.
+                None if session.is_none() => (
+                    None,
+                    Some("its newest log is from an earlier launch".to_string()),
+                ),
+                None => (
+                    None,
+                    Some("the client has not reached a server yet".to_string()),
+                ),
+            }
+        };
+
+        Ok(StripState {
+            running,
+            place: session.as_ref().and_then(|receipt| receipt.place),
+            name: session.as_ref().and_then(|receipt| receipt.name.clone()),
+            endpoint,
+            account,
+            seconds: session.as_ref().map(|receipt| receipt.seconds).unwrap_or(0),
+            ping,
+            note,
+        })
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The strip could not read the session: {e}")))?
+}
+
+/// Opens the strip, or brings back the one already open.
+///
+/// It is a window of its own rather than a panel: a launcher that has to be in front to
+/// show a ping is a launcher covering the game it is measuring.
+///
+/// `async` on purpose. A synchronous command runs on the main thread, and creating a
+/// window asks the event loop for one, so the two wait on each other forever.
+#[tauri::command]
+async fn strip_open(app: AppHandle) -> Result<(), LaunchError> {
+    if let Some(window) = app.get_webview_window("strip") {
+        let _ = window.show();
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(&app, "strip", tauri::WebviewUrl::App("index.html".into()))
+        .title("KURO")
+        .inner_size(312.0, 84.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .build()
+        .map_err(|e| worker_failed(format!("The strip window could not open: {e}")))?;
+
+    Ok(())
+}
+
+/// Closes the strip when its own close button is used, so the button works even on a
+/// window the main page no longer has a handle for.
+#[tauri::command]
+async fn strip_close(app: AppHandle) -> Result<(), LaunchError> {
+    if let Some(window) = app.get_webview_window("strip") {
+        let _ = window.close();
+    }
+    Ok(())
+}
+
 // ---- stage 05, flags ----
 
 /// Everything the flags drawer needs in one answer: the catalogue's age, the
@@ -1954,6 +2096,9 @@ pub fn run() {
             profiles_launch,
             gpu_view,
             gpu_pin,
+            strip_state,
+            strip_open,
+            strip_close,
             discovery_home,
             discovery_search,
             discovery_game,
@@ -1998,4 +2143,28 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("the launcher window failed to start");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The ping the strip shows, measured against a host that always answers.
+    ///
+    /// Ignored by default so a machine without a network is not a failing test; run
+    /// it with `cargo test --lib -- --ignored` when the path needs proving.
+    #[test]
+    #[ignore = "network: needs a host that answers"]
+    fn a_round_trip_reads_as_milliseconds() {
+        let millis = round_trip("1.1.1.1:443").expect("a public host answers");
+        assert!(
+            millis < 2000,
+            "a round trip took {millis} ms, which is not plausible"
+        );
+    }
+
+    #[test]
+    fn a_target_that_is_not_an_endpoint_is_refused_rather_than_guessed_at() {
+        assert!(round_trip("not-an-address").is_err());
+    }
 }

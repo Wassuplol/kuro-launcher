@@ -516,9 +516,12 @@ function Details({ receipt }: { receipt: Receipt }) {
             {receipt.universe ? <span className="num text-muted"> · universe {receipt.universe}</span> : null}
           </Fact>
         ) : null}
-        {receipt.server ? (
+        {(receipt.endpoint ?? receipt.server) ? (
           <Fact label="Server">
-            <span className="num">{receipt.server}</span>
+            <span className="num">{receipt.endpoint ?? receipt.server}</span>
+            {receipt.endpoint && receipt.server && receipt.endpoint !== receipt.server ? (
+              <span className="num text-muted"> · joined via {receipt.server}</span>
+            ) : null}
             {receipt.job ? (
               <span className="ml-2 truncate text-muted" title={receipt.job}>
                 {receipt.job}

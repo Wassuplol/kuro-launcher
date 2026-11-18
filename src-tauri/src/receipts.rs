@@ -25,6 +25,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use serde::Serialize;
 
@@ -75,6 +76,10 @@ pub struct Receipt {
     pub universe: Option<u64>,
     pub job: Option<String>,
     pub server: Option<String>,
+    /// The endpoint from the handshake line, `<ip>:<port>`. This is the machine that
+    /// actually answered; the join address above is often a relay that is not the
+    /// game server and not something worth measuring.
+    pub endpoint: Option<String>,
     /// Seconds from process start to the join completing, when the client said so.
     pub join_seconds: Option<u64>,
     pub handshake: bool,
@@ -153,6 +158,52 @@ pub fn scan(data_root: &Path) -> Result<Vec<Receipt>, LaunchError> {
     Ok(receipts)
 }
 
+/// The session in progress, if there is one.
+///
+/// The client writes one log per launch and keeps appending while it runs, so the
+/// newest log with a fresh modification time is the session happening now. A log
+/// untouched for half an hour is a finished one, and answering with it would put
+/// yesterday's session on a strip that claims to be live.
+pub fn live(data_root: &Path) -> Option<Receipt> {
+    const FRESH: Duration = Duration::from_secs(30 * 60);
+
+    let dir = logs_dir()?;
+    let mut newest: Option<(SystemTime, PathBuf, String)> = None;
+
+    for entry in fs::read_dir(&dir).ok()?.flatten() {
+        let path = entry.path();
+        let Some(file) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !file.ends_with(".log") || !file.contains("_Player_") || file.contains("CrashHandler") {
+            continue;
+        }
+        let Ok(modified) = entry.metadata().and_then(|meta| meta.modified()) else {
+            continue;
+        };
+        if newest
+            .as_ref()
+            .map(|(at, _, _)| modified > *at)
+            .unwrap_or(true)
+        {
+            newest = Some((modified, path.clone(), file.to_string()));
+        }
+    }
+
+    let (modified, path, file) = newest?;
+    if modified.elapsed().unwrap_or_default() > FRESH {
+        return None;
+    }
+
+    let mut receipt = parse(&path, &file)?;
+    if let Some(place) = receipt.place {
+        if let Some(name) = known_names(data_root).get(&place) {
+            receipt.name = Some(name.clone());
+        }
+    }
+    Some(receipt)
+}
+
 /// Place names from the launcher's own history, so a receipt reads "Brookhaven"
 /// instead of an id. Best effort: a launch made outside this app has no name here,
 /// and the row falls back to the id rather than inventing one.
@@ -185,6 +236,7 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
     let mut universe = None;
     let mut job = None;
     let mut server = None;
+    let mut endpoint = None;
     let mut join_seconds = None;
     let mut handshake = false;
     let mut adapter = None;
@@ -241,6 +293,21 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
 
         if line.contains("Handshake complete") {
             handshake = true;
+            // `… [DFLog::RbxTransportRnaExpConnection] 128.116.5.33:63242. Handshake
+            // complete.` The endpoint sits right before the sentence, and it is the only
+            // place the client names the server that answered rather than a relay.
+            if endpoint.is_none() {
+                if let Some(at) = line.find(" Handshake complete") {
+                    let token = line[..at]
+                        .split_whitespace()
+                        .last()
+                        .unwrap_or("")
+                        .trim_end_matches('.');
+                    if is_endpoint(token) {
+                        endpoint = Some(token.to_string());
+                    }
+                }
+            }
         }
 
         // The client logs both the adapter list and the one it chose; the chosen one
@@ -396,6 +463,7 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
         universe,
         job,
         server,
+        endpoint,
         join_seconds,
         handshake,
         adapter,
@@ -446,6 +514,16 @@ fn host_of(url: &str) -> &str {
         .or_else(|| url.strip_prefix("http://"))
         .unwrap_or(url);
     rest.split('/').next().unwrap_or(rest)
+}
+
+/// Whether a token is `<ipv4>:<port>`, which is the shape the handshake line carries.
+/// A bare address is not one: the join line's relay address has no port and is not the
+/// server, so it must not be mistaken for a measurement target.
+fn is_endpoint(token: &str) -> bool {
+    match token.rsplit_once(':') {
+        Some((ip, port)) => ip.parse::<std::net::Ipv4Addr>().is_ok() && port.parse::<u16>().is_ok(),
+        None => false,
+    }
 }
 
 /// The relative-seconds field every log line carries as its second column.
@@ -687,6 +765,11 @@ mod tests {
             Some("f2e8bfce-f3e5-4f58-adfc-d18b5cdeacbf")
         );
         assert_eq!(receipt.server.as_deref(), Some("10.206.10.135"));
+        assert_eq!(
+            receipt.endpoint.as_deref(),
+            Some("128.116.5.33:63242"),
+            "the handshake line names the server that answered, not the relay"
+        );
         assert!(receipt.handshake);
         assert_eq!(
             receipt.adapter.as_deref(),
@@ -744,6 +827,17 @@ mod tests {
             .contains("Stopped before it reached a server"));
         assert!(receipt.verdict.contains("1 failed request"));
         assert_eq!(receipt.action.as_deref(), Some("Check the network"));
+    }
+
+    #[test]
+    fn an_endpoint_is_an_address_with_a_port_and_nothing_else() {
+        assert!(is_endpoint("128.116.5.33:63242"));
+        // The join address is a relay with no port, and measuring it would be measuring
+        // the wrong machine.
+        assert!(!is_endpoint("10.206.10.135"));
+        assert!(!is_endpoint("128.116.5.33:"));
+        assert!(!is_endpoint("scid=2a75dd38"));
+        assert!(!is_endpoint(""));
     }
 
     #[test]

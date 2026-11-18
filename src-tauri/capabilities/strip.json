@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "strip",
+  "description": "The in-game strip: its own small window, its own session read, its own close button. Nothing else.",
+  "windows": ["strip"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
+  ]
+}

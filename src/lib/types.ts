@@ -213,6 +213,20 @@ export type LaunchTile = {
   used: number;
 };
 
+export type StripState = {
+  running: boolean;
+  place: number | null;
+  name: string | null;
+  /** `<ip>:<port>` from the client's handshake line, once one has happened. */
+  endpoint: string | null;
+  account: string | null;
+  /** The client's own clock at the last read, in seconds. */
+  seconds: number;
+  ping: number | null;
+  /** Why there is no ping number, said once instead of left blank. */
+  note: string | null;
+};
+
 export type LaunchState = {
   /** A game client is running right now. */
   playerRunning: boolean;
@@ -496,6 +510,8 @@ export type Receipt = {
   universe: number | null;
   job: string | null;
   server: string | null;
+  /** `<ip>:<port>` from the handshake line: the server that answered. */
+  endpoint: string | null;
   joinSeconds: number | null;
   handshake: boolean;
   adapter: string | null;

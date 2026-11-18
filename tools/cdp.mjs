@@ -18,7 +18,16 @@ const BASE = `http://127.0.0.1:${PORT}`;
 async function pageSocket() {
   const response = await fetch(`${BASE}/json/list`);
   const targets = await response.json();
-  const page = targets.find((target) => target.type === "page");
+  // Two windows, two page targets. KURO_CDP_MATCH picks one by a substring of its
+  // address; a value prefixed with "!" picks the first target that does NOT carry it,
+  // which is how the strip is reached when both windows share a document address.
+  const match = process.env.KURO_CDP_MATCH ?? "";
+  const pages = targets.filter((target) => target.type === "page");
+  const page = match.startsWith("!")
+    ? pages.find((target) => !(target.url ?? "").includes(match.slice(1)))
+    : match
+      ? pages.find((target) => (target.url ?? "").includes(match))
+      : pages[0];
   if (!page) throw new Error("no page target; is the launcher running with the debug port?");
   return page.webSocketDebuggerUrl;
 }

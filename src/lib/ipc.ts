@@ -34,6 +34,7 @@ import type {
   QuickLoginPoll,
   Settings,
   Shelf,
+  StripState,
   SupplySnapshot,
   VerifyReport,
 } from "./types";
@@ -156,6 +157,11 @@ export const api = {
   gpuView: () => call<GpuPin>("gpu_view"),
   /** Writes the entry now, and remembers whether launches re-apply it. */
   gpuPin: (on: boolean) => call<GpuPin>("gpu_pin", { on }),
+
+  /** The session in progress, for the window that floats over the game. */
+  stripState: () => call<StripState>("strip_state"),
+  stripOpen: () => call<void>("strip_open"),
+  stripClose: () => call<void>("strip_close"),
 
   discoveryHome: () => call<DiscoveryFeed>("discovery_home"),
   discoverySearch: (term: string, people: boolean) =>
