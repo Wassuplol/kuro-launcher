@@ -125,10 +125,10 @@ jobs:
 
             The portable `kuro-launcher.exe` is the same build without an installer: put
             it in a folder, and a file named `portable` beside it keeps its data there.
-        files: |
-          src-tauri/target/release/bundle/nsis/*.exe
-          src-tauri/target/release/bundle/msi/*.msi
-          src-tauri/target/release/kuro-launcher.exe
-          SHA256SUMS.txt
+          files: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/kuro-launcher.exe
+            SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
