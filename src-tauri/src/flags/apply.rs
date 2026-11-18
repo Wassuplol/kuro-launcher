@@ -118,6 +118,23 @@ fn replace(path: &Path, bytes: &[u8]) -> Result<(), LaunchError> {
     })
 }
 
+/// The value as the client wants to read it: a string, always.
+///
+/// Measured on 0.748.0.7481526: `"FFlagDebugGraphicsPreferVulkan": "True"` makes
+/// the client load `vulkan-1.dll`, and `: true` in the same key leaves it on
+/// D3D11. So the file this app writes holds `"True"` and `"240"`, not `true` and
+/// `240`. The store keeps the typed value because the screen needs the kind; the
+/// conversion happens exactly here, at the edge.
+fn text(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        Value::Bool(true) => "True".to_string(),
+        Value::Bool(false) => "False".to_string(),
+        Value::Number(number) => number.to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// Writes the resolved rows and records what was there before.
 pub fn apply(root: &Path, target: &Path, rows: &[Row]) -> Result<Lease, LaunchError> {
     let existing = std::fs::read(target).ok();
@@ -145,7 +162,7 @@ pub fn apply(root: &Path, target: &Path, rows: &[Row]) -> Result<Lease, LaunchEr
 
     let mut map = Map::new();
     for row in rows {
-        map.insert(row.key.clone(), row.value.clone());
+        map.insert(row.key.clone(), Value::String(text(&row.value)));
     }
     let body = serde_json::to_vec_pretty(&Value::Object(map)).map_err(|e| {
         LaunchError::new(
@@ -262,8 +279,10 @@ mod tests {
         assert!(written.backup.is_none());
 
         let written: Value = serde_json::from_slice(&std::fs::read(&target).unwrap()).unwrap();
-        assert_eq!(written["FFlagOne"], json!(true));
-        assert_eq!(written["DFIntTwo"], json!(60));
+        // Strings, not booleans and numbers: the client ignores the other
+        // spelling on the same key. Measured, see `text`.
+        assert_eq!(written["FFlagOne"], json!("True"));
+        assert_eq!(written["DFIntTwo"], json!("60"));
 
         assert!(revert(&root).unwrap().is_some());
         assert!(!target.exists());
@@ -326,6 +345,15 @@ mod tests {
         let text = std::fs::read_to_string(&target).unwrap();
         let parsed: serde_json::Map<String, Value> = serde_json::from_str(&text).unwrap();
         assert_eq!(parsed.len(), 2);
-        assert_eq!(parsed.get("FFlagOne"), Some(&json!(true)));
+        assert_eq!(parsed.get("FFlagTwo"), None);
+        assert_eq!(parsed.get("FFlagOne"), Some(&json!("True")));
+    }
+
+    #[test]
+    fn every_value_reaches_the_file_as_a_string() {
+        assert_eq!(text(&json!(true)), "True");
+        assert_eq!(text(&json!(false)), "False");
+        assert_eq!(text(&json!(240)), "240");
+        assert_eq!(text(&json!("Trace;1234")), "Trace;1234");
     }
 }

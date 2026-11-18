@@ -143,8 +143,6 @@ export const api = {
     call<FlagStore>("flags_set_scope", { slot, id, profile }),
   flagsResolve: (account: number | null, place: number | null) =>
     call<FlagRow[]>("flags_resolve", { account, place }),
-  flagsPlace: (placement: "user" | "version") =>
-    call<Settings>("flags_place", { placement }),
   flagsApply: (account: number | null, place: number | null) =>
     call<FlagLease>("flags_apply", { account, place }),
   flagsRevert: () => call<string | null>("flags_revert"),

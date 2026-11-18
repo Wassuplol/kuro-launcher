@@ -54,23 +54,6 @@ pub struct Launching {
     pub multi_instance: bool,
 }
 
-/// Where flag writes go. Per-user by default, because a client update replaces
-/// the version folder and a person should not have to re-apply after every
-/// Roblox update.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct Configuring {
-    pub placement: crate::flags::Placement,
-}
-
-impl Default for Configuring {
-    fn default() -> Self {
-        Self {
-            placement: crate::flags::Placement::User,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -79,7 +62,6 @@ pub struct Settings {
     pub intro: Intro,
     pub supply: Supply,
     pub launch: Launching,
-    pub flags: Configuring,
     pub advanced: bool,
 }
 
@@ -91,7 +73,6 @@ impl Default for Settings {
             intro: Intro::default(),
             supply: Supply::default(),
             launch: Launching::default(),
-            flags: Configuring::default(),
             advanced: false,
         }
     }

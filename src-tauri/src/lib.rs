@@ -399,7 +399,6 @@ fn open_site(url: String) -> Result<(), LaunchError> {
 /// Writes the flags that apply to one launch, and says what happened either way.
 fn apply_flags_for(
     root: &std::path::Path,
-    placement: flags::Placement,
     installed: &[supply::InstalledClient],
     pinned: &Option<String>,
     account: u64,
@@ -418,15 +417,27 @@ fn apply_flags_for(
         );
     }
 
-    let target = match flags::target(placement, installed, pinned) {
+    let target = match flags::target(installed, pinned) {
         Ok(target) => target,
         Err(error) => return (false, Some(error.message)),
     };
 
+    // The count Roblox will actually apply on the next boot. Saying "5 flags
+    // written" over a file the client drops four of is the sentence the
+    // allowlist turned into a lie.
+    let honoured = flags::allow::count(rows.iter().map(|row| row.key.as_str()));
+
     match flags::apply::apply(root, std::path::Path::new(&target.path), &rows) {
-        Ok(lease) => (
+        Ok(lease) if honoured == lease.keys => (
             true,
             Some(format!("{} flags written to {}", lease.keys, lease.path)),
+        ),
+        Ok(lease) => (
+            true,
+            Some(format!(
+                "{} flags written to {}; the client honours {} of them and ignores the rest",
+                lease.keys, lease.path, honoured
+            )),
         ),
         Err(error) => (false, Some(error.message)),
     }
@@ -463,12 +474,11 @@ async fn launch_start(
     user_id: Option<u64>,
 ) -> Result<launch::Launched, LaunchError> {
     let root = state.data_root.clone();
-    let (pinned, multi, placement) = {
+    let (pinned, multi) = {
         let settings = state.settings.lock().map_err(|_| poisoned())?;
         (
             settings.supply.pinned.clone(),
             settings.launch.multi_instance,
-            settings.flags.placement,
         )
     };
 
@@ -555,14 +565,8 @@ async fn launch_start(
         // Flags go in before the client starts, because the client reads the
         // file once at boot. A failure here is reported and the launch goes
         // ahead: a game with vanilla flags beats no game.
-        let (leashed, flag_note) = apply_flags_for(
-            &root,
-            placement,
-            &installed,
-            &pinned,
-            chosen,
-            prepared.place,
-        );
+        let (leashed, flag_note) =
+            apply_flags_for(&root, &installed, &pinned, chosen, prepared.place);
 
         let outcome = (|| {
             let ticket = launch::ticket::mint(&cookie)?;
@@ -708,17 +712,11 @@ pub struct FlagsView {
     /// A flag file that was put back on this start because the last run did not
     /// finish cleanly.
     pub recovered: Option<String>,
-    pub placement: flags::Placement,
+    /// The keys the client takes from a local file, so the page can say which
+    /// of the person's flags will actually do anything.
+    pub allowlist: &'static [&'static str],
+    pub allowlist_source: &'static str,
     pub player_running: bool,
-}
-
-fn placement(state: &State<'_, AppState>) -> Result<flags::Placement, LaunchError> {
-    Ok(state
-        .settings
-        .lock()
-        .map_err(|_| poisoned())?
-        .flags
-        .placement)
 }
 
 fn installed_clients(
@@ -738,18 +736,18 @@ fn installed_clients(
 #[tauri::command]
 async fn flags_view(state: State<'_, AppState>) -> Result<FlagsView, LaunchError> {
     let root = state.data_root.clone();
-    let chosen = placement(&state)?;
     let (installed, pinned) = installed_clients(&state)?;
     let recovered = state.recovered.lock().map_err(|_| poisoned())?.take();
 
     Ok(FlagsView {
         catalog: flags::catalog::load(&root),
         store: flags::store::load(&root)?,
-        target: flags::target(chosen, &installed, &pinned).ok(),
+        target: flags::target(&installed, &pinned).ok(),
         lease: flags::apply::lease(&root),
         exports: flags::exports(&root),
         recovered,
-        placement: chosen,
+        allowlist: &flags::allow::KEYS,
+        allowlist_source: flags::allow::SOURCE,
         player_running: launch::spawn::player_running(),
     })
 }
@@ -883,22 +881,6 @@ fn flags_resolve(
     Ok(flags::store::resolve(&store, account, place))
 }
 
-#[tauri::command]
-fn flags_place(
-    state: State<'_, AppState>,
-    placement: flags::Placement,
-) -> Result<Settings, LaunchError> {
-    let next = {
-        let mut settings = state.settings.lock().map_err(|_| poisoned())?;
-        settings.flags.placement = placement;
-        settings::normalise(settings.clone())
-    };
-    settings::save(&state.data_root, &next)?;
-    let mut guard = state.settings.lock().map_err(|_| poisoned())?;
-    *guard = next.clone();
-    Ok(next)
-}
-
 /// Writes the resolved flags now, outside a launch. A live client makes this a
 /// refusal, because the file is read at boot and would not reach that session.
 #[tauri::command]
@@ -925,9 +907,8 @@ fn flags_apply(
         .with_action("Add a flag"));
     }
 
-    let chosen = placement(&state)?;
     let (installed, pinned) = installed_clients(&state)?;
-    let target = flags::target(chosen, &installed, &pinned)?;
+    let target = flags::target(&installed, &pinned)?;
     flags::apply::apply(&state.data_root, std::path::Path::new(&target.path), &rows)
 }
 
@@ -1327,7 +1308,6 @@ pub fn run() {
             flags_delete_profile,
             flags_set_scope,
             flags_resolve,
-            flags_place,
             flags_apply,
             flags_revert,
             flags_export,

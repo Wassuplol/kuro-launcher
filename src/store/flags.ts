@@ -2,7 +2,7 @@ import { toast } from "sonner";
 import { create } from "zustand";
 
 import { api, CommandError, failureDetail } from "../lib/ipc";
-import type { FlagHit, FlagRow, FlagStore, Placement } from "../lib/types";
+import type { FlagHit, FlagRow, FlagStore } from "../lib/types";
 
 function announce(value: unknown, fallback: string): void {
   const failure = value instanceof CommandError ? value : null;
@@ -33,7 +33,6 @@ type FlagsState = {
   deleteProfile: (name: string) => Promise<void>;
   setFlag: (key: string, value: unknown | null) => Promise<void>;
   setScope: (slot: "global" | "account" | "game", id: number | null, profile: string | null) => Promise<void>;
-  place: (placement: Placement) => Promise<void>;
   refreshCatalog: () => Promise<void>;
   apply: (account: number | null, place: number | null) => Promise<void>;
   revert: () => Promise<void>;
@@ -146,20 +145,6 @@ export const useFlags = create<FlagsState>()((set, get) => ({
       set({ view: { ...view, store } });
     } catch (value) {
       announce(value, "That scope was not changed.");
-    }
-  },
-
-  place: async (placement) => {
-    const view = get().view;
-    if (!view) return;
-    set({ working: true });
-    try {
-      await api.flagsPlace(placement);
-      const fresh = await api.flagsView();
-      set({ view: fresh, working: false });
-    } catch (value) {
-      set({ working: false });
-      announce(value, "That placement was not saved.");
     }
   },
 

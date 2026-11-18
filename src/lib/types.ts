@@ -211,6 +211,11 @@ export type FlagHit = {
   /** Absent when Roblox does not serve the key, which means no known default. */
   default: string | null;
   kind: FlagKind;
+  /**
+   * Whether the client takes this key from a local file at all. Roblox allowlists
+   * local overrides, so false means the key is written and then discarded.
+   */
+  honoured: boolean;
 };
 
 export type FlagSource = "account" | "game" | "global";
@@ -247,12 +252,7 @@ export type FlagCatalog = {
   values: Record<string, string>;
 };
 
-export type Placement = "user" | "version";
-
 export type FlagTarget = {
-  placement: Placement;
-  label: string;
-  note: string;
   path: string;
   exists: boolean;
   /** What is already in that file, whoever put it there. */
@@ -277,7 +277,9 @@ export type FlagsView = {
   lease: FlagLease | null;
   exports: FlagExport[];
   recovered: string | null;
-  placement: Placement;
+  /** The keys the client will take from a local file, as Roblox publishes them. */
+  allowlist: string[];
+  allowlistSource: string;
   playerRunning: boolean;
 };
 

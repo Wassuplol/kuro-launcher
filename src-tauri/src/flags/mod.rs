@@ -10,7 +10,17 @@
 //! Nothing here touches a running client, and applying is refused while one is
 //! running, because a flag file is read at boot: writing it under a live client
 //! produces a session whose flags do not match the file on disk.
+//!
+//! Three facts decide whether a written flag has any effect, and all three were
+//! measured on 0.748.0.7481526 rather than assumed:
+//!
+//! 1. the file has to be the copy inside the version folder, not the per-user one;
+//! 2. every value has to be a JSON string (`"True"`, `"240"`); a JSON `true` in
+//!    the same key is ignored;
+//! 3. the key has to be on Roblox's Fast Flag allowlist, which is 18 keys and
+//!    lives in `allow`.
 
+pub mod allow;
 pub mod apply;
 pub mod catalog;
 pub mod store;
@@ -21,61 +31,11 @@ pub use store::{Row, Source, Store};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::error::{FailureCode, LaunchError};
-use crate::supply::{self, InstalledClient, Kind};
-
-/// Where a flag file can live. Both are read by the client; the per-user one
-/// survives an update, and the per-version one is replaced by Roblox when the
-/// client updates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Placement {
-    /// `%LOCALAPPDATA%\Roblox\ClientSettings\ClientAppSettings.json`
-    User,
-    /// `<Versions>\version-<hash>\ClientSettings\ClientAppSettings.json`
-    Version,
-}
-
-impl Placement {
-    pub fn label(self) -> &'static str {
-        match self {
-            Placement::User => "This Windows user",
-            Placement::Version => "This client build",
-        }
-    }
-
-    pub fn note(self) -> &'static str {
-        match self {
-            Placement::User => "Survives a client update. One file for every build.",
-            Placement::Version => "Replaced when Roblox updates the client.",
-        }
-    }
-}
-
-/// The file a flag write would touch, what is in it now, and which build it
-/// belongs to when the placement is per-version.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Target {
-    pub placement: Placement,
-    pub label: String,
-    pub note: String,
-    pub path: String,
-    pub exists: bool,
-    /// What the person (or another tool) already put in that file.
-    pub current: BTreeMap<String, Value>,
-    /// The build this file sits inside, for the per-version placement.
-    pub client: Option<String>,
-}
-
-/// `%LOCALAPPDATA%\Roblox\Versions` in, `%LOCALAPPDATA%\Roblox\ClientSettings\ClientAppSettings.json` out.
-fn user_client_settings(versions: &Path) -> PathBuf {
-    let base = versions.parent().unwrap_or(versions);
-    base.join("ClientSettings").join("ClientAppSettings.json")
-}
+use crate::supply::{InstalledClient, Kind};
 
 fn read_json(path: &Path) -> BTreeMap<String, Value> {
     std::fs::read(path)
@@ -84,50 +44,47 @@ fn read_json(path: &Path) -> BTreeMap<String, Value> {
         .unwrap_or_default()
 }
 
-/// Resolves a placement to a real file. Reading it here is deliberate: the
-/// screen shows what is actually on disk, not what this app remembers writing.
+/// The file a flag write would touch, what is in it now, and which build it
+/// sits inside.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Target {
+    pub path: String,
+    pub exists: bool,
+    /// What the person (or another tool) already put in that file.
+    pub current: BTreeMap<String, Value>,
+    /// The build whose folder this file sits inside.
+    pub client: Option<String>,
+}
+
+/// The one file the client reads: `ClientSettings\ClientAppSettings.json` inside
+/// the build that is about to run.
+///
+/// There used to be a choice here. Measured on 0.748.0.7481526 with the same
+/// bytes in both places: `%LOCALAPPDATA%\Roblox\ClientSettings\ClientAppSettings.json`
+/// changes nothing, while the copy inside the version folder takes effect on the
+/// next boot. The per-user file was the older path and this client stopped
+/// reading it, so the choice is gone rather than left on screen as a switch that
+/// does not work.
 pub fn target(
-    placement: Placement,
     installed: &[InstalledClient],
     pinned: &Option<String>,
 ) -> Result<Target, LaunchError> {
-    let path = match placement {
-        Placement::User => {
-            let root = supply::roots()
-                .into_iter()
-                .find(|root| root.per_user)
-                .ok_or_else(|| {
-                    LaunchError::new(
-                        FailureCode::NotFound,
-                        "This machine has no per-user Roblox folder.",
-                    )
-                })?;
-            // A supply root points at `Roblox\Versions`, and the settings
-            // folder is its parent, not a child. Joining straight onto the root
-            // produced `Roblox\Versions\ClientSettings`, a folder the client
-            // never reads.
-            user_client_settings(std::path::Path::new(&root.path))
-        }
-        Placement::Version => {
-            let client = pick_client(installed, pinned).ok_or_else(|| {
-                LaunchError::new(
-                    FailureCode::ClientMissing,
-                    "No Roblox client is installed, so there is no build to write into.",
-                )
-                .with_action("Open Roblox versions")
-            })?;
-            PathBuf::from(&client.path)
-                .join("ClientSettings")
-                .join("ClientAppSettings.json")
-        }
-    };
+    let client = pick_client(installed, pinned).ok_or_else(|| {
+        LaunchError::new(
+            FailureCode::ClientMissing,
+            "No Roblox client is installed, so there is no build to write into.",
+        )
+        .with_action("Open Roblox versions")
+    })?;
+
+    let path = PathBuf::from(&client.path)
+        .join("ClientSettings")
+        .join("ClientAppSettings.json");
 
     let existing = std::fs::read(&path).ok();
 
     Ok(Target {
-        placement,
-        label: placement.label().to_string(),
-        note: placement.note().to_string(),
         exists: existing.is_some(),
         current: existing
             .map(|bytes| {
@@ -135,10 +92,7 @@ pub fn target(
             })
             .unwrap_or_default(),
         path: path.to_string_lossy().to_string(),
-        client: match placement {
-            Placement::Version => pick_client(installed, pinned).map(|client| client.folder),
-            Placement::User => None,
-        },
+        client: Some(client.folder),
     })
 }
 
@@ -330,14 +284,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_per_user_target_sits_beside_the_versions_folder_not_inside_it() {
-        let got = user_client_settings(Path::new(r"C:\Users\dodia\AppData\Local\Roblox\Versions"));
+    fn the_target_is_the_settings_file_inside_the_build_that_will_run() {
+        // Measured on 0.748.0.7481526: the per-user file is ignored by this
+        // client, the copy inside the version folder is not. So the target has
+        // to land beside the executable, not beside the versions folder.
+        let folder = "version-2c6fd5e09aaf4cfa".to_string();
+        let path = format!(r"C:\Program Files\Roblox\Versions\{folder}");
+        let client = InstalledClient {
+            folder: folder.clone(),
+            path: path.clone(),
+            root: "Program Files".to_string(),
+            per_user: false,
+            kind: Some(Kind::Player),
+            version: Some("0.748.0.7481526".to_string()),
+            publisher: Some("Roblox Corporation".to_string()),
+            real: true,
+            bytes: 0,
+            files: 0,
+            modified: None,
+            tracked: false,
+            pinned: false,
+            holder: None,
+            live: true,
+        };
+
+        let target = target(&[client], &None).expect("a live client resolves");
         assert_eq!(
-            got,
-            PathBuf::from(
-                r"C:\Users\dodia\AppData\Local\Roblox\ClientSettings\ClientAppSettings.json"
-            )
+            target.path,
+            format!(r"{path}\ClientSettings\ClientAppSettings.json")
         );
+        assert_eq!(target.client.as_deref(), Some(folder.as_str()));
     }
 
     #[test]

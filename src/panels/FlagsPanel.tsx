@@ -5,6 +5,7 @@ import { Toggle } from "../components/Toggle";
 import { cn } from "../lib/cn";
 import { ago } from "../lib/format";
 import type { FlagKind } from "../lib/types";
+import { api } from "../lib/ipc";
 import { useAccounts } from "../store/accounts";
 import { useFlags } from "../store/flags";
 
@@ -154,6 +155,11 @@ function Catalog() {
                     ) : (
                       <span className="num"> · default {hit.default}</span>
                     )}
+                    {hit.honoured ? (
+                      <span> · the client honours this one</span>
+                    ) : (
+                      <span> · written, then ignored: not on the allowlist</span>
+                    )}
                   </div>
                 </div>
                 <button
@@ -243,6 +249,9 @@ function Profiles() {
               key={key}
               name={key}
               value={value}
+              honoured={view.allowlist.some(
+                (allowed) => allowed.toLowerCase() === key.toLowerCase(),
+              )}
               onChange={(next) => void setFlag(key, next)}
               onRemove={() => void setFlag(key, null)}
               disabled={working}
@@ -320,12 +329,15 @@ function Profiles() {
 function FlagLine({
   name,
   value,
+  honoured,
   onChange,
   onRemove,
   disabled,
 }: {
   name: string;
   value: unknown;
+  /** False when Roblox dropped this key from its allowlist of local overrides. */
+  honoured: boolean;
   onChange: (next: unknown) => void;
   onRemove: () => void;
   disabled: boolean;
@@ -373,7 +385,10 @@ function FlagLine({
     <div className="flex min-h-[42px] items-center justify-between gap-3 border-b border-white/6 px-3.5 py-2 last:border-b-0">
       <div className="min-w-0">
         <div className="truncate font-mono text-[11.5px] text-body">{name}</div>
-        <div className="mt-0.5 text-[11px] text-muted">{KIND_LABEL[kind]}</div>
+        <div className="mt-0.5 text-[11px] text-muted">
+          {KIND_LABEL[kind]}
+          {honoured ? null : <span className="text-gold/80"> · the client ignores this key</span>}
+        </div>
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
@@ -513,7 +528,6 @@ function Scopes({ account }: { account: { userId: number; display: string }[] })
 
 function Write() {
   const view = useFlags((state) => state.view);
-  const place = useFlags((state) => state.place);
   const apply = useFlags((state) => state.apply);
   const revert = useFlags((state) => state.revert);
   const working = useFlags((state) => state.working);
@@ -524,10 +538,11 @@ function Write() {
   const target = view.target;
   const lease = view.lease;
   const account = accounts?.[0]?.userId ?? null;
-  const keys = view.store.profiles.reduce(
-    (total, profile) => total + Object.keys(profile.values).length,
-    0,
-  );
+  const every = view.store.profiles.flatMap((profile) => Object.keys(profile.values));
+  const keys = every.length;
+  const honoured = every.filter((key) =>
+    view.allowlist.some((allowed) => allowed.toLowerCase() === key.toLowerCase()),
+  ).length;
 
   return (
     <Section
@@ -543,30 +558,24 @@ function Write() {
       }
     >
       <div className="px-3.5 py-2.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {(["user", "version"] as const).map((choice) => (
-            <button
-              key={choice}
-              type="button"
-              onClick={() => void place(choice)}
-              disabled={working}
-              aria-pressed={view.placement === choice}
-              className={cn(
-                "ui h-6 rounded-control border px-2 text-[11px]",
-                view.placement === choice
-                  ? "border-gold/50 bg-gold/10 text-gold"
-                  : "border-white/10 text-muted hover:text-body",
-              )}
-            >
-              {choice === "user" ? "This Windows user" : "This client build"}
-            </button>
-          ))}
-        </div>
-
-        <p className="mt-2 text-[11px] leading-[1.55] text-muted">
-          {target
-            ? `${target.note} ${target.exists ? `${Object.keys(target.current).length} keys are in it now.` : "The file does not exist yet."}`
-            : "No place to write yet."}
+        <p className="text-[11px] leading-[1.55] text-muted">
+          One file, the copy inside the build that will run. The per-user file beside the
+          versions folder is not read by this client any more — measured, not assumed.
+        </p>
+        <p className="mt-1.5 text-[11px] leading-[1.55] text-muted">
+          Roblox allowlists local overrides: this client honours{" "}
+          <span className="text-body">{view.allowlist.length}</span> keys and silently drops every
+          other one.{" "}
+          {keys === 0
+            ? "Nothing of yours is written yet."
+            : `${honoured} of your ${plural(keys, "flag")} ${honoured === 1 ? "is" : "are"} on that list.`}{" "}
+          <button
+            type="button"
+            onClick={() => void api.openSite(view.allowlistSource)}
+            className="ui underline decoration-white/25 underline-offset-2 hover:text-body"
+          >
+            Roblox's list
+          </button>
         </p>
         {target ? (
           <p className="mt-1 break-all font-mono text-[10.5px] leading-[1.5] text-muted/80">

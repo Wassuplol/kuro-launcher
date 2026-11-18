@@ -169,6 +169,11 @@ pub struct Hit {
     pub key: String,
     pub default: Option<String>,
     pub kind: Kind,
+    /// Whether the client will take this key from a local file. False does not
+    /// mean the key is wrong, only that a local override of it is discarded —
+    /// the screen has to say which, because silently offering both is the lie
+    /// the allowlist created.
+    pub honoured: bool,
 }
 
 pub fn search(catalog: &Catalog, query: &str, limit: usize) -> Vec<Hit> {
@@ -183,15 +188,17 @@ pub fn search(catalog: &Catalog, query: &str, limit: usize) -> Vec<Hit> {
             key: key.clone(),
             default: Some(value.clone()),
             kind: Kind::of(key),
+            honoured: super::allow::honours(key),
         })
         .collect();
 
     // A query that names a key Roblox does not serve is still offered, with no
     // default, because that is exactly the case a person is asking about when
     // they type a name they read somewhere. `DFIntTaskSchedulerTargetFps` is the
-    // proof that this branch matters: it is honoured by the client and absent
-    // from the served list, so a search that only shows served keys hides the
-    // one flag most people came for.
+    // proof that this branch matters: it is absent from the served list and
+    // people arrive looking for it, and the row is also the proof that "offered"
+    // must never mean "works" — the client drops it, because it is not on the
+    // allowlist.
     let typed = query.trim();
     let typed_is_key = Kind::of(typed).known() && typed.len() > 6;
     let already = hits.iter().any(|hit| hit.key == typed);
@@ -201,6 +208,7 @@ pub fn search(catalog: &Catalog, query: &str, limit: usize) -> Vec<Hit> {
             key: typed.to_string(),
             default: None,
             kind: Kind::of(typed),
+            honoured: super::allow::honours(typed),
         });
     }
 

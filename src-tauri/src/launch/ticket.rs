@@ -12,12 +12,17 @@ const TICKET: &str = "https://auth.roblox.com/v1/authentication-ticket";
 const SITE: &str = "https://www.roblox.com";
 
 /// A ticket for one launch. Call it once per launch and throw it away after.
+///
+/// The `Referer` is not decoration. Measured against the live endpoint: with the
+/// cookie and a valid CSRF token but no referer it answers 403 `The UrlReferrer
+/// was invalid or came from outside Roblox.`; add the referer and the same call
+/// answers 200 with a 427 character ticket. `Origin` changes nothing either way.
 pub fn mint(cookie: &str) -> Result<String, LaunchError> {
     let header = format!(".ROBLOSECURITY={cookie}");
     let answer = http::post_json(
         TICKET,
         "{}",
-        &[("Cookie", header.as_str()), ("Origin", SITE)],
+        &[("Cookie", header.as_str()), ("Referer", SITE)],
     )?;
 
     if answer.ok() {
