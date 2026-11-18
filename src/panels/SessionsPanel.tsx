@@ -7,6 +7,7 @@ import { Badge, Section } from "../components/Panel";
 import { cn } from "../lib/cn";
 import { bytes, span, stamp } from "../lib/format";
 import { api, CommandError, failureDetail } from "../lib/ipc";
+import { copyText, inviteLink } from "../lib/invite";
 import type { GpuPin, Ledger, Receipt } from "../lib/types";
 
 /**
@@ -521,18 +522,27 @@ function ReceiptRow({ receipt }: { receipt: Receipt }) {
 
 function Details({ receipt }: { receipt: Receipt }) {
   const [copied, setCopied] = useState(false);
+  const [invited, setInvited] = useState(false);
 
   // The job id is what makes a link land in this exact server, and the log is the only
   // place this app ever learns it.
   const copyParty = async () => {
     const url = await api.linkFor(receipt.place, receipt.job, null).catch(() => null);
     if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Nothing to do but leave the button as it was: the log row still says everything.
+    }
+  };
+
+  // The same server as a link anyone can open, with no launcher on their machine. The
+  // card in front of it comes from this project's Pages site; the destination is
+  // Roblox's own games/start URL.
+  const copyInvite = async () => {
+    if (receipt.place == null) return;
+    if (await copyText(inviteLink(receipt.place, receipt.job))) {
+      setInvited(true);
+      window.setTimeout(() => setInvited(false), 2000);
     }
   };
 
@@ -624,6 +634,16 @@ function Details({ receipt }: { receipt: Receipt }) {
             className="ui flex h-6 items-center gap-1.5 rounded-control border border-white/10 px-2 text-[11px] text-muted hover:border-white/20 hover:text-body"
           >
             {copied ? "Copied" : "Copy party link"}
+          </button>
+        ) : null}
+        {receipt.place ? (
+          <button
+            type="button"
+            onClick={() => void copyInvite()}
+            title="A short link anyone can open: this place and this server, no launcher needed"
+            className="ui flex h-6 items-center gap-1.5 rounded-control border border-white/10 px-2 text-[11px] text-muted hover:border-white/20 hover:text-body"
+          >
+            {invited ? "Copied" : "Copy invite"}
           </button>
         ) : null}
         {receipt.action ? <span className="text-[11px] text-gold">{receipt.action}</span> : null}

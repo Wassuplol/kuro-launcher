@@ -69,7 +69,7 @@ export function Strip() {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-full w-full items-stretch overflow-hidden rounded-[10px] border border-white/12 bg-panel/95"
+      className="flex h-full w-full items-stretch overflow-hidden rounded-[12px] border border-white/12 bg-panel"
     >
       <div data-tauri-drag-region className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-3 py-2">
         <div data-tauri-drag-region className="flex items-baseline justify-between gap-3">

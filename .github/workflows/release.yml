@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build, e.g. v0.2.0 (must match tauri.conf.json)"
+        description: "Tag to build, e.g. v0.2.1 (must match tauri.conf.json)"
         required: true
         type: string
 
@@ -159,6 +159,20 @@ jobs:
             catalogue kept per client version with a diff between any two, `kuro://` party
             links registered from Settings, and Discord presence (off by default, and it
             needs your own Discord application id before it shows anything).
+
+            ## What is new in 0.2.1
+
+            The in-game strip lost its square corners: the window is transparent now, so the
+            card is the whole shape instead of a card inside a dark rectangle. Its ping is
+            gone as well, because a TCP probe against a game port only ever measured the
+            absence of a TCP service. It shows the client's own join time instead.
+
+            Play time starts at the join line. A client that prewarms in the tray for three
+            hours and plays for four minutes no longer banks three hours.
+
+            Sessions and the launch panel can now copy a short invite link
+            (`wassuplol.github.io/kuro-launcher/join/...`) that shows the game and the exact
+            server before opening it, for people who do not have KURO installed.
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi

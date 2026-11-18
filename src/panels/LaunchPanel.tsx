@@ -4,6 +4,7 @@ import { Badge, Row, Section } from "../components/Panel";
 import { Tiles } from "../components/Tiles";
 import { Toggle } from "../components/Toggle";
 import { api, CommandError, failureDetail } from "../lib/ipc";
+import { copyText, inviteLink } from "../lib/invite";
 import type { Launched, LaunchReading } from "../lib/types";
 import { useAccounts } from "../store/accounts";
 import { useDiscovery } from "../store/discovery";
@@ -122,6 +123,14 @@ export function LaunchBody() {
   // A party link is the launch, written down: the place, and the account that would
   // open it. The exact server comes from a receipt, because a fresh launch does not
   // know its job id until the client has joined one.
+  const copyInvite = async (place: number | null) => {
+    if (place == null) return;
+    if (await copyText(inviteLink(place, null))) {
+      setCopied("invite");
+      window.setTimeout(() => setCopied((current) => (current === "invite" ? null : current)), 2000);
+    }
+  };
+
   const copyParty = async (
     key: string,
     place: number | null,
@@ -130,11 +139,10 @@ export function LaunchBody() {
   ) => {
     const url = await api.linkFor(place, server, account).catch(() => null);
     if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       setCopied(key);
       window.setTimeout(() => setCopied((current) => (current === key ? null : current)), 2000);
-    } catch {
+    } else {
       // A clipboard that refuses is worth saying out loud, with the link in reach.
       setLaunchProblem({ message: `The clipboard refused the copy. The link is ${url}` });
     }
@@ -298,6 +306,14 @@ export function LaunchBody() {
                 className="ui h-6 shrink-0 rounded-control border border-white/10 px-2 text-[11px] text-muted hover:border-white/20 hover:text-body"
               >
                 {copied === "launch" ? "Copied" : "Copy party link"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyInvite(done.place)}
+                title="A short link anyone can open: this game, no launcher needed"
+                className="ui h-6 shrink-0 rounded-control border border-white/10 px-2 text-[11px] text-muted hover:border-white/20 hover:text-body"
+              >
+                {copied === "invite" ? "Copied" : "Copy invite"}
               </button>
             </div>
           ) : (

@@ -1,3 +1,22 @@
 @import "tailwindcss";
 @import "./fonts.css";
 @import "./tokens.css";
+
+/*
+ * The page canvas is transparent on purpose.
+ *
+ * The strip is a transparent window with a rounded card, and WebView2 paints the page's
+ * canvas behind it: with the default dark canvas the card's rounded corners came out as
+ * four solid blocks. The launcher window paints its own background, so this costs it
+ * nothing.
+ */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body {
+  background: transparent;
+}
