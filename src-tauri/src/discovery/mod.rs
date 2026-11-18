@@ -54,6 +54,7 @@ pub enum Class {
     Feed,
     Search,
     Games,
+    Servers,
     Thumbs,
 }
 
@@ -64,6 +65,10 @@ impl Class {
             Class::Feed => 30,
             Class::Search => 4,
             Class::Games => 60,
+            // Measured: the public server list is the most expensive call on the
+            // surface, three a minute. A page that fetches it on mount spends the
+            // minute before anyone asks for it.
+            Class::Servers => 3,
             Class::Thumbs => 500,
         }
     }
@@ -73,6 +78,7 @@ impl Class {
             Class::Feed => "the home feed",
             Class::Search => "search",
             Class::Games => "game details",
+            Class::Servers => "the server list",
             Class::Thumbs => "thumbnails",
         }
     }
@@ -272,6 +278,75 @@ struct RawResult {
     has_verified_badge: bool,
 }
 
+#[derive(Deserialize)]
+struct RawOne {
+    #[serde(default)]
+    data: Vec<RawDetail>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawDetail {
+    id: u64,
+    #[serde(default)]
+    root_place_id: Option<u64>,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    description: String,
+    #[serde(default)]
+    creator: Option<RawCreator>,
+    #[serde(default)]
+    playing: u64,
+    #[serde(default)]
+    visits: u64,
+    #[serde(default)]
+    max_players: u64,
+    #[serde(default)]
+    genre: String,
+    #[serde(default)]
+    created: String,
+    #[serde(default)]
+    updated: String,
+}
+
+#[derive(Deserialize)]
+struct RawVotes {
+    #[serde(default)]
+    data: Vec<RawVote>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawVote {
+    #[serde(default)]
+    up_votes: u64,
+    #[serde(default)]
+    down_votes: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawServers {
+    #[serde(default)]
+    data: Vec<RawServer>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawServer {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    playing: u32,
+    #[serde(default)]
+    max_players: u32,
+    #[serde(default)]
+    ping: u32,
+    #[serde(default)]
+    fps: f32,
+}
+
 // ---- the shapes on screen ----
 
 /// What hydration adds to an id: the words and numbers the tile needs.
@@ -320,6 +395,47 @@ pub struct Person {
     pub display: String,
     pub verified: bool,
     pub headshot: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameDetail {
+    pub universe: u64,
+    pub place: u64,
+    pub name: String,
+    pub creator: String,
+    pub description: String,
+    pub players: u64,
+    pub visits: u64,
+    pub max_players: u64,
+    pub genre: String,
+    pub created: String,
+    pub updated: String,
+    pub up_votes: u64,
+    pub down_votes: u64,
+    pub icon: Option<String>,
+    pub fetched: u64,
+    pub cached: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Server {
+    /// The instance id a launch needs, handed to `roblox://…&gameInstanceId=`.
+    pub id: String,
+    pub playing: u32,
+    pub max_players: u32,
+    pub ping: u32,
+    pub fps: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Servers {
+    pub place: u64,
+    pub list: Vec<Server>,
+    pub fetched: u64,
+    pub cached: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -722,6 +838,189 @@ pub fn search(
     })
 }
 
+/// One game, with the numbers a detail page needs.
+///
+/// Two calls: the game payload (60 a minute) and votes (200). Both are cached for
+/// five minutes, because a detail page is a place people go back to.
+pub fn game(
+    budget: &Budget,
+    cache: &Cache,
+    cookie: Option<&str>,
+    universe: u64,
+) -> Result<GameDetail, LaunchError> {
+    let key = format!("detail:{universe}");
+    let cached = cache.get(&key).is_some();
+
+    if let Some(body) = cache.get(&key) {
+        if let Ok(detail) = serde_json::from_str::<GameDetail>(&body) {
+            return Ok(GameDetail { cached, ..detail });
+        }
+    }
+
+    budget.spend(Class::Games)?;
+    let mut request = http::agent(Duration::from_secs(15)).get(&format!("{GAMES}{universe}"));
+    if let Some(cookie) = cookie {
+        request = request.header("Cookie", &format!(".ROBLOSECURITY={cookie}"));
+    }
+    let answer = request.call().map_err(|e| {
+        LaunchError::new(
+            FailureCode::Network,
+            format!("That game could not be read: {e}."),
+        )
+    })?;
+    let status = answer.status().as_u16();
+    let body = answer.into_body().read_to_string().unwrap_or_default();
+    if status >= 400 {
+        return Err(LaunchError::new(
+            FailureCode::NotFound,
+            format!("Roblox answered {status} for that game."),
+        )
+        .with_action("Back to Home"));
+    }
+
+    let parsed: RawOne = serde_json::from_str(&body).map_err(|e| {
+        LaunchError::new(
+            FailureCode::Internal,
+            format!("The game payload was not the documented shape: {e}."),
+        )
+    })?;
+    let Some(raw) = parsed.data.into_iter().next() else {
+        return Err(LaunchError::new(
+            FailureCode::NotFound,
+            "That game id is not one Roblox serves.",
+        )
+        .with_action("Back to Home"));
+    };
+
+    let (up_votes, down_votes) = votes(budget, cache, universe);
+    let icons = icons(budget, cache, &[universe]).unwrap_or_default();
+
+    let detail = GameDetail {
+        universe,
+        place: raw.root_place_id.unwrap_or(raw.id),
+        name: raw.name,
+        creator: raw.creator.map(|c| c.name).unwrap_or_default(),
+        description: raw.description,
+        players: raw.playing,
+        visits: raw.visits,
+        max_players: raw.max_players,
+        genre: raw.genre,
+        created: raw.created,
+        updated: raw.updated,
+        up_votes,
+        down_votes,
+        icon: icons.get(&universe).cloned(),
+        fetched: now(),
+        cached,
+    };
+    cache.put(
+        &key,
+        &serde_json::to_string(&detail).unwrap_or_default(),
+        Duration::from_secs(300),
+    );
+    Ok(detail)
+}
+
+/// Up and down votes. A failure here leaves the game visible with zeros, because
+/// a rating is not worth hiding a page over.
+fn votes(budget: &Budget, cache: &Cache, universe: u64) -> (u64, u64) {
+    let key = format!("votes:{universe}");
+    if let Some(body) = cache.get(&key) {
+        if let Ok(parsed) = serde_json::from_str::<RawVotes>(&body) {
+            if let Some(vote) = parsed.data.into_iter().next() {
+                return (vote.up_votes, vote.down_votes);
+            }
+        }
+        return (0, 0);
+    }
+
+    if budget.spend(Class::Games).is_err() {
+        return (0, 0);
+    }
+    let Ok(answer) = http::get(&format!(
+        "https://games.roblox.com/v1/games/votes?universeIds={universe}"
+    )) else {
+        return (0, 0);
+    };
+    if !answer.ok() {
+        return (0, 0);
+    }
+    cache.put(&key, &answer.body, Duration::from_secs(300));
+    serde_json::from_str::<RawVotes>(&answer.body)
+        .ok()
+        .and_then(|parsed| parsed.data.into_iter().next())
+        .map(|vote| (vote.up_votes, vote.down_votes))
+        .unwrap_or((0, 0))
+}
+
+/// The public server list for one place.
+///
+/// Three calls a minute, so this is never fetched on mount: the page asks when the
+/// Servers tab is opened, and the answer is kept for two minutes.
+pub fn servers(budget: &Budget, cache: &Cache, place: u64) -> Result<Servers, LaunchError> {
+    let key = format!("servers:{place}");
+    let cached = cache.get(&key).is_some();
+
+    if let Some(body) = cache.get(&key) {
+        if let Ok(list) = serde_json::from_str::<Vec<Server>>(&body) {
+            return Ok(Servers {
+                place,
+                list,
+                fetched: now(),
+                cached,
+            });
+        }
+    }
+
+    budget.spend(Class::Servers)?;
+    let url =
+        format!("https://games.roblox.com/v1/games/{place}/servers/Public?limit=10&sortOrder=Desc");
+    let answer = http::get(&url)?;
+    if !answer.ok() {
+        return Err(LaunchError::new(
+            FailureCode::NotFound,
+            format!(
+                "The server list answered {}: {}",
+                answer.status,
+                answer.reason()
+            ),
+        )
+        .with_action("Try again"));
+    }
+
+    let parsed: RawServers = serde_json::from_str(&answer.body).map_err(|e| {
+        LaunchError::new(
+            FailureCode::Internal,
+            format!("The server list was not the documented shape: {e}."),
+        )
+    })?;
+
+    let list: Vec<Server> = parsed
+        .data
+        .into_iter()
+        .map(|server| Server {
+            id: server.id,
+            playing: server.playing,
+            max_players: server.max_players,
+            ping: server.ping,
+            fps: server.fps,
+        })
+        .collect();
+
+    cache.put(
+        &key,
+        &serde_json::to_string(&list).unwrap_or_default(),
+        Duration::from_secs(120),
+    );
+
+    Ok(Servers {
+        place,
+        list,
+        fetched: now(),
+        cached,
+    })
+}
+
 fn headshots(
     budget: &Budget,
     cache: &Cache,
@@ -873,6 +1172,15 @@ mod tests {
             .filter_map(|item| item.content_id)
             .collect();
         assert_eq!(ids, vec![65241, 189707]);
+    }
+
+    #[test]
+    fn the_server_list_is_what_a_launch_needs() {
+        let body = r#"{"data":[{"id":"b1f3fe94-97fd-4d7a-8942-e09f62e62a91","playing":12,"maxPlayers":30,"ping":42,"fps":59.8}],"nextPageCursor":null}"#;
+        let raw: RawServers = serde_json::from_str(body).unwrap();
+        assert_eq!(raw.data.len(), 1);
+        assert_eq!(raw.data[0].ping, 42);
+        assert_eq!(raw.data[0].id, "b1f3fe94-97fd-4d7a-8942-e09f62e62a91");
     }
 
     #[test]

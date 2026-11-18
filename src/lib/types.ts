@@ -326,3 +326,37 @@ export type DiscoverySearch = {
   fetched: number;
   cached: boolean;
 };
+
+export type GameDetail = {
+  universe: number;
+  place: number;
+  name: string;
+  creator: string;
+  description: string;
+  players: number;
+  visits: number;
+  maxPlayers: number;
+  genre: string;
+  created: string;
+  updated: string;
+  upVotes: number;
+  downVotes: number;
+  icon: string | null;
+  fetched: number;
+  cached: boolean;
+};
+
+export type GameServer = {
+  id: string;
+  playing: number;
+  maxPlayers: number;
+  ping: number;
+  fps: number;
+};
+
+export type GameServers = {
+  place: number;
+  list: GameServer[];
+  fetched: number;
+  cached: boolean;
+};

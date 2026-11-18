@@ -26,6 +26,7 @@ import { useShell } from "../store/shell";
 import { AccountsScreen } from "../screens/Accounts";
 import { FlagsScreen } from "../screens/Flags";
 import { FriendsScreen } from "../screens/Friends";
+import { GameScreen } from "../screens/Game";
 import { HomeScreen } from "../screens/Home";
 import { LaunchScreen } from "../screens/Launch";
 import { LibraryScreen } from "../screens/Library";
@@ -62,6 +63,7 @@ const SCREENS: Record<Page, ComponentType> = {
   accounts: AccountsScreen,
   flags: FlagsScreen,
   versions: VersionsScreen,
+  game: GameScreen,
 };
 
 function TitleBar() {

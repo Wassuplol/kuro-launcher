@@ -254,6 +254,64 @@ for (const page of PAGES) {
   );
 }
 
+// One page is not on the rail: a game is opened from a tile, so it is reached the
+// way a person reaches it, and measured the same way.
+await evaluate(`(() => { location.hash = "#/home"; location.reload(); "ok" })()`);
+await settle();
+// The feed is a network call, so the tiles arrive after the page: wait for one
+// instead of measuring the skeleton and reporting that there is nothing to open.
+let opened = false;
+for (let attempt = 0; attempt < 40 && !opened; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  opened = await evaluate(`(() => {
+    const tile = [...document.querySelectorAll("main button[title]")].find((el) =>
+      (el.getAttribute("title") ?? "").startsWith("Open"),
+    );
+    if (!tile) return false;
+    tile.click();
+    return true;
+  })()`);
+}
+
+if (!opened) {
+  failures.push("game: no tile to open");
+} else {
+  // Two settles with a pause between them: the first can land on the frame React
+  // committed before the route change repainted, which measured a column 330px
+  // off and a page that looked fine in the capture.
+  await settle();
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  await settle();
+  const { heading, blocks, framed, pinned, tiny, column } = await evaluate(probe);
+  if (!framed || !heading || !blocks?.length) {
+    failures.push("game: the page did not render a column");
+  } else {
+    for (let i = 1; i < blocks.length; i += 1) {
+      if (blocks[i].top < blocks[i - 1].bottom - 1) {
+        failures.push(
+          `game: "${blocks[i - 1].title}" (${blocks[i - 1].top}-${blocks[i - 1].bottom}) overlaps "${blocks[i].title}" (${blocks[i].top}-${blocks[i].bottom})`,
+        );
+      }
+    }
+    if (pinned.length) failures.push(`game: pinned elements in main: ${pinned.join(" | ")}`);
+    if (tiny.length) {
+      failures.push(
+        `game: controls under 16px: ${tiny.map((b) => `${b.label || "(no label)"} ${b.w}x${b.h}`).join(", ")}`,
+      );
+    }
+    for (const block of blocks) {
+      if (block.left < column.left - 1 || block.right > column.right + 1) {
+        failures.push(
+          `game: "${block.title}" escapes the column (${block.left}-${block.right} vs ${column.left}-${column.right})`,
+        );
+      }
+    }
+    console.log(
+      `${"game".padEnd(9)} ${String(heading ?? "?").slice(0, 22).padEnd(22)} ${String(blocks.length).padStart(2)} blocks, column ${column.left}-${column.right}`,
+    );
+  }
+}
+
 session.close();
 
 if (failures.length) {

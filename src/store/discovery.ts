@@ -2,7 +2,7 @@ import { toast } from "sonner";
 import { create } from "zustand";
 
 import { api, CommandError, detailOf } from "../lib/ipc";
-import type { DiscoveryFeed } from "../lib/types";
+import type { DiscoveryFeed, GameDetail, GameServers } from "../lib/types";
 
 /**
  * The home feed.
@@ -17,12 +17,28 @@ type DiscoveryState = {
   loading: boolean;
   problem: { message: string; detail?: string } | null;
   load: (force?: boolean) => Promise<void>;
+
+  detail: GameDetail | null;
+  detailLoading: boolean;
+  detailProblem: { message: string; detail?: string } | null;
+  loadGame: (universe: number) => Promise<void>;
+
+  servers: GameServers | null;
+  serversLoading: boolean;
+  serversProblem: { message: string; detail?: string } | null;
+  loadServers: (place: number) => Promise<void>;
 };
 
 export const useDiscovery = create<DiscoveryState>()((set, get) => ({
   feed: null,
   loading: false,
   problem: null,
+  detail: null,
+  detailLoading: false,
+  detailProblem: null,
+  servers: null,
+  serversLoading: false,
+  serversProblem: null,
 
   load: async (force = false) => {
     if (get().loading) return;
@@ -40,6 +56,45 @@ export const useDiscovery = create<DiscoveryState>()((set, get) => ({
       };
       set({ loading: false, problem });
       if (failure) toast.error(failure.message, { description: detailOf(failure.code, failure.action) });
+    }
+  },
+
+  /** One game. Cheap enough to fetch again when the id changes, never on a timer. */
+  loadGame: async (universe) => {
+    if (get().detail?.universe === universe) return;
+    set({ detailLoading: true, detailProblem: null, detail: null, servers: null });
+    try {
+      set({ detail: await api.discoveryGame(universe), detailLoading: false });
+    } catch (value) {
+      const failure = value instanceof CommandError ? value : null;
+      set({
+        detailLoading: false,
+        detailProblem: {
+          message: failure?.message ?? "That game could not be read.",
+          detail: failure ? detailOf(failure.code, failure.action) : undefined,
+        },
+      });
+    }
+  },
+
+  /**
+   * The server list. Three calls a minute, so this is only ever called from the
+   * Servers tab, and an answer already in hand is not asked for again.
+   */
+  loadServers: async (place) => {
+    if (get().servers?.place === place && !get().serversProblem) return;
+    set({ serversLoading: true, serversProblem: null });
+    try {
+      set({ servers: await api.discoveryServers(place), serversLoading: false });
+    } catch (value) {
+      const failure = value instanceof CommandError ? value : null;
+      set({
+        serversLoading: false,
+        serversProblem: {
+          message: failure?.message ?? "The server list could not be read.",
+          detail: failure ? detailOf(failure.code, failure.action) : undefined,
+        },
+      });
     }
   },
 }));

@@ -975,6 +975,42 @@ async fn discovery_search(
     .map_err(|e| worker_failed(format!("The search was not answered: {e}")))?
 }
 
+/// One game, for the detail page.
+#[tauri::command]
+async fn discovery_game(
+    state: State<'_, AppState>,
+    universe: u64,
+) -> Result<discovery::GameDetail, LaunchError> {
+    let root = state.data_root.clone();
+    let cookie = identity::load(&root).ok().and_then(|store| {
+        let user = store
+            .default
+            .or_else(|| store.accounts.first().map(|a| a.user_id))?;
+        identity::cookie_for(&root, user).ok()
+    });
+    let budget = state.budget.clone();
+    let cache = state.cache.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        discovery::game(&budget, &cache, cookie.as_deref(), universe)
+    })
+    .await
+    .map_err(|e| worker_failed(format!("That game was not read: {e}")))?
+}
+
+/// The public server list. Three a minute, so only a deliberate ask reaches it.
+#[tauri::command]
+async fn discovery_servers(
+    state: State<'_, AppState>,
+    place: u64,
+) -> Result<discovery::Servers, LaunchError> {
+    let budget = state.budget.clone();
+    let cache = state.cache.clone();
+    tauri::async_runtime::spawn_blocking(move || discovery::servers(&budget, &cache, place))
+        .await
+        .map_err(|e| worker_failed(format!("The server list was not read: {e}")))?
+}
+
 /// What is left of each allowance, so a screen can say why a button is waiting.
 #[tauri::command]
 fn discovery_budget(state: State<'_, AppState>) -> Vec<(String, usize, usize)> {
@@ -982,6 +1018,7 @@ fn discovery_budget(state: State<'_, AppState>) -> Vec<(String, usize, usize)> {
         discovery::Class::Feed,
         discovery::Class::Search,
         discovery::Class::Games,
+        discovery::Class::Servers,
         discovery::Class::Thumbs,
     ])
 }
@@ -1374,6 +1411,8 @@ pub fn run() {
             launch_state,
             discovery_home,
             discovery_search,
+            discovery_game,
+            discovery_servers,
             discovery_budget,
             flags_view,
             flags_refresh,

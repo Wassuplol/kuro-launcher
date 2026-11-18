@@ -18,6 +18,8 @@ type ShellState = {
   page: Page;
   /** A place a grid sent to the Launch page, consumed there once. */
   pending: string | null;
+  /** The game the detail page is showing, put there by the tile that opened it. */
+  game: { universe: number; place: number } | null;
   paletteOpen: boolean;
   settingsOpen: boolean;
   onboardingOpen: boolean;
@@ -26,6 +28,7 @@ type ShellState = {
   go: (page: Page) => void;
   prefill: (target: string) => void;
   clearPending: () => void;
+  openGame: (universe: number, place: number) => void;
   openPalette: () => void;
   closePalette: () => void;
   openSettings: () => void;
@@ -45,6 +48,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   bootFailed: false,
   page: pageFromHash(window.location.hash),
   pending: null,
+  game: null,
   paletteOpen: false,
   settingsOpen: false,
   onboardingOpen: false,
@@ -81,6 +85,11 @@ export const useShell = create<ShellState>()((set, get) => ({
   },
 
   clearPending: () => set({ pending: null }),
+
+  openGame: (universe, place) => {
+    reflect("game");
+    set({ game: { universe, place }, page: "game", paletteOpen: false, settingsOpen: false });
+  },
 
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),

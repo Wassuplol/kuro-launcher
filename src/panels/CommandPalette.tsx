@@ -3,7 +3,7 @@ import { Command } from "cmdk";
 import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, Home, Library, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 
-import { PAGE_LABEL, PAGES, type Page } from "../app/router";
+import { PAGE_LABEL, PAGES } from "../app/router";
 import { ENTER } from "../lib/motion";
 import { useShell } from "../store/shell";
 
@@ -23,7 +23,7 @@ const ICONS = {
  * Launch, "fastflags" for Flags: the palette is where somebody who has not
  * learned the rail yet will look first.
  */
-const KEYWORDS: Record<Page, string> = {
+const KEYWORDS: Record<(typeof PAGES)[number], string> = {
   home: "start overview",
   search: "find games people",
   library: "saved shelf",

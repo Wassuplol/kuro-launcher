@@ -11,6 +11,8 @@ import type {
   FlagStore,
   DiscoveryFeed,
   DiscoverySearch,
+  GameDetail,
+  GameServers,
   ImportedFlags,
   InstallMethod,
   Launched,
@@ -138,6 +140,8 @@ export const api = {
   discoverySearch: (term: string, people: boolean) =>
     call<DiscoverySearch>("discovery_search", { term, people }),
   discoveryBudget: () => call<[string, number, number][]>("discovery_budget"),
+  discoveryGame: (universe: number) => call<GameDetail>("discovery_game", { universe }),
+  discoveryServers: (place: number) => call<GameServers>("discovery_servers", { place }),
 
   flagsView: () => call<FlagsView>("flags_view"),
   flagsRefresh: () => call<FlagCatalog>("flags_refresh"),
