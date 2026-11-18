@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build, e.g. v0.1.0 (must match tauri.conf.json)"
+        description: "Tag to build, e.g. v0.2.0 (must match tauri.conf.json)"
         required: true
         type: string
 
@@ -148,6 +148,17 @@ jobs:
 
             The portable `kuro-launcher.exe` is the same build without an installer: put
             it in a folder, and a file named `portable` beside it keeps its data there.
+
+            ## What is new in 0.2.0
+
+            Sessions reads the client's own log and says what actually happened: the place,
+            the server it reached, the GPU it picked, how long the join took and why it
+            ended. On top of that: a playtime ledger that outlives log rotation, a graphics
+            pin written for the exact client executable and re-applied when Roblox installs
+            a new version folder, launch tiles, an always-on-top in-game strip, one flag
+            catalogue kept per client version with a diff between any two, `kuro://` party
+            links registered from Settings, and Discord presence (off by default, and it
+            needs your own Discord application id before it shows anything).
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
