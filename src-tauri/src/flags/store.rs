@@ -60,6 +60,8 @@ impl Default for Store {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Source {
+    /// A launch tile named a profile, so it goes in front of the chain for one launch.
+    Launch,
     Account,
     Game,
     Global,
@@ -68,6 +70,7 @@ pub enum Source {
 impl Source {
     pub fn label(self) -> &'static str {
         match self {
+            Source::Launch => "this launch",
             Source::Account => "account",
             Source::Game => "game",
             Source::Global => "global",
@@ -244,8 +247,25 @@ fn is_bool_word(text: &str) -> bool {
 /// The rows are the union, not the winning profile: a person needs to see the
 /// nine flags their account profile sets even when a game profile sets a tenth.
 pub fn resolve(store: &Store, account: Option<u64>, place: Option<u64>) -> Vec<Row> {
+    resolve_for(store, None, account, place)
+}
+
+/// The same walk, with a tile's own profile in front of it.
+///
+/// Front, not instead: a tile that sets two flags must not silently drop the account
+/// profile's nine. What the tile names wins per key, and everything else still
+/// resolves the way it did before the tile existed.
+pub fn resolve_for(
+    store: &Store,
+    launch: Option<&str>,
+    account: Option<u64>,
+    place: Option<u64>,
+) -> Vec<Row> {
     let mut chain: Vec<(Source, String)> = Vec::new();
 
+    if let Some(name) = launch.map(str::trim).filter(|name| !name.is_empty()) {
+        chain.push((Source::Launch, name.to_string()));
+    }
     if let Some(id) = account {
         if let Some(name) = store.scopes.accounts.get(&id.to_string()) {
             chain.push((Source::Account, name.clone()));
@@ -350,6 +370,21 @@ mod tests {
         let rows = resolve(&store(), Some(156), Some(1818));
         // Union, not the winning profile: three distinct keys across the chain.
         assert_eq!(rows.len(), 3);
+    }
+
+    #[test]
+    fn a_tile_profile_goes_in_front_of_the_chain_without_dropping_it() {
+        let store = store();
+        let rows = resolve_for(&store, Some("game"), Some(156), Some(1818));
+
+        // The tile's profile wins the key it sets...
+        let one = rows.iter().find(|row| row.key == "FFlagOne").unwrap();
+        assert_eq!(one.source, Source::Launch);
+        assert_eq!(one.value, json!(false));
+
+        // ...and every other key the chain carries still arrives.
+        assert!(rows.iter().any(|row| row.key == "FFlagGameOnly"));
+        assert!(rows.iter().any(|row| row.key == "DFIntTwo"));
     }
 
     #[test]

@@ -22,6 +22,7 @@ import type {
   Launched,
   LaunchReading,
   LaunchState,
+  LaunchTile,
   MultiInstance,
   PlayLog,
   Played,
@@ -144,6 +145,12 @@ export const api = {
   launchMultiInstance: (enabled: boolean) =>
     call<MultiInstance>("launch_multi_instance", { enabled }),
   launchState: () => call<LaunchState>("launch_state"),
+
+  /** Tiles: a destination that remembers its account, flags and build. */
+  tilesList: () => call<LaunchTile[]>("profiles_list"),
+  tileSave: (profile: LaunchTile) => call<LaunchTile[]>("profiles_save", { profile }),
+  tileDelete: (id: string) => call<LaunchTile[]>("profiles_delete", { id }),
+  tileLaunch: (id: string) => call<Launched>("profiles_launch", { id }),
 
   /** What Windows says about the graphics preference for the build about to run. */
   gpuView: () => call<GpuPin>("gpu_view"),

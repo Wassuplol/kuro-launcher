@@ -7,6 +7,7 @@ pub mod http;
 pub mod identity;
 pub mod launch;
 pub mod library;
+pub mod profiles;
 pub mod receipts;
 pub mod settings;
 pub mod social;
@@ -424,13 +425,14 @@ fn apply_flags_for(
     pinned: &Option<String>,
     account: u64,
     place: Option<u64>,
+    tile_flags: Option<&str>,
 ) -> (bool, Option<String>) {
     let store = match flags::store::load(root) {
         Ok(store) => store,
         Err(error) => return (false, Some(error.message)),
     };
 
-    let rows = flags::store::resolve(&store, Some(account), place);
+    let rows = flags::store::resolve_for(&store, tile_flags, Some(account), place);
     if rows.is_empty() {
         return (
             false,
@@ -484,15 +486,25 @@ async fn launch_read(
     .map_err(|e| worker_failed(format!("That destination could not be read: {e}")))?
 }
 
+/// What one launch needs, whether it came from the Launch page or from a tile.
+pub struct RunRequest {
+    pub target: String,
+    pub user_id: Option<u64>,
+    /// A flag profile used in front of the scope chain, for this launch only.
+    pub flags: Option<String>,
+    /// A client folder to run instead of the pinned or live build.
+    pub client: Option<String>,
+    pub after: profiles::After,
+}
+
 /// One launch: parse, preflight, mint a ticket, build the string, spawn.
 ///
 /// The ticket is minted here and used once. It is never returned to the page,
 /// never stored, and never reused, because it is single use by design.
-#[tauri::command]
-async fn launch_start(
-    state: State<'_, AppState>,
-    target: String,
-    user_id: Option<u64>,
+async fn run_launch(
+    app: &AppHandle,
+    state: &AppState,
+    request: RunRequest,
 ) -> Result<launch::Launched, LaunchError> {
     let root = state.data_root.clone();
     let (pinned, multi, gpu_pin) = {
@@ -503,13 +515,34 @@ async fn launch_start(
             settings.launch.gpu_pin,
         )
     };
+    let app = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
         let installed = supply::discover_all(&pinned, None)?;
-        let prepared = launch::prepare(&target, &installed, &pinned)?;
+
+        // A tile that names a build means that build: falling back to another one
+        // would undo the only reason the field exists.
+        if let Some(folder) = &request.client {
+            let ready = installed.iter().any(|client| {
+                client.real && client.kind == Some(Kind::Player) && &client.folder == folder
+            });
+            if !ready {
+                return Err(LaunchError::new(
+                    FailureCode::ClientMissing,
+                    format!("The build {folder} this tile names is not on this machine any more."),
+                )
+                .with_action("Open Roblox versions"));
+            }
+        }
+
+        // The chosen build also decides where the flag file is written, so it is one
+        // decision rather than two that can disagree.
+        let effective = request.client.clone().or_else(|| pinned.clone());
+        let prepared = launch::prepare(&request.target, &installed, &effective)?;
 
         let store = identity::load(&root)?;
-        let chosen = user_id
+        let chosen = request
+            .user_id
             .or(store.default)
             .or_else(|| store.accounts.first().map(|account| account.user_id));
 
@@ -548,7 +581,7 @@ async fn launch_start(
 
         let cookie = identity::cookie_for(&root, chosen)?;
 
-        let key = format!("{chosen}|{target}");
+        let key = format!("{chosen}|{}", request.target);
         let reused = launch::begin(&key)?;
 
         let mode = prepared.mode;
@@ -588,8 +621,14 @@ async fn launch_start(
         // Flags go in before the client starts, because the client reads the
         // file once at boot. A failure here is reported and the launch goes
         // ahead: a game with vanilla flags beats no game.
-        let (leashed, flag_note) =
-            apply_flags_for(&root, &installed, &pinned, chosen, prepared.place);
+        let (leashed, flag_note) = apply_flags_for(
+            &root,
+            &installed,
+            &effective,
+            chosen,
+            prepared.place,
+            request.flags.as_deref(),
+        );
 
         // Windows reads this per executable path, and a new version folder is a new
         // path, so it is re-applied on the way into every launch rather than once.
@@ -620,6 +659,15 @@ async fn launch_start(
                 // Recorded so "continue as" has an answer next time. A failure
                 // here must not turn a running client into an error.
                 let _ = identity::mark_used(&root, chosen);
+
+                // The launcher steps out of the way when a tile asked it to. The
+                // window is minimised rather than closed, so the flag lease thread
+                // above keeps a process to finish in.
+                if request.after == profiles::After::Minimize {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.minimize();
+                    }
+                }
 
                 if leashed {
                     let data = root.clone();
@@ -665,6 +713,105 @@ async fn launch_start(
     })
     .await
     .map_err(|e| worker_failed(format!("The launch did not finish: {e}")))?
+}
+
+/// The Launch page's own button: one destination, one account, everything else as
+/// the app is set up.
+#[tauri::command]
+async fn launch_start(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    target: String,
+    user_id: Option<u64>,
+) -> Result<launch::Launched, LaunchError> {
+    run_launch(
+        &app,
+        state.inner(),
+        RunRequest {
+            target,
+            user_id,
+            flags: None,
+            client: None,
+            after: profiles::After::Stay,
+        },
+    )
+    .await
+}
+
+// ---- launch tiles ----
+
+/// Every tile on this machine, newest first.
+#[tauri::command]
+fn profiles_list(state: State<'_, AppState>) -> Result<Vec<profiles::LaunchProfile>, LaunchError> {
+    Ok(profiles::ordered(&profiles::load(&state.data_root)?))
+}
+
+#[tauri::command]
+fn profiles_save(
+    state: State<'_, AppState>,
+    profile: profiles::LaunchProfile,
+) -> Result<Vec<profiles::LaunchProfile>, LaunchError> {
+    let root = state.data_root.clone();
+    let mut store = profiles::load(&root)?;
+    profiles::upsert(&mut store, profile)?;
+    profiles::save(&root, &store)?;
+    Ok(profiles::ordered(&store))
+}
+
+#[tauri::command]
+fn profiles_delete(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Vec<profiles::LaunchProfile>, LaunchError> {
+    let root = state.data_root.clone();
+    let mut store = profiles::load(&root)?;
+    // Deleting a tile that is already gone is the state the person asked for.
+    if profiles::remove(&mut store, &id) {
+        profiles::save(&root, &store)?;
+    }
+    Ok(profiles::ordered(&store))
+}
+
+/// Runs one tile: its destination, its account, its flag profile, its build.
+#[tauri::command]
+async fn profiles_launch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<launch::Launched, LaunchError> {
+    let root = state.data_root.clone();
+    let tile = profiles::find(&profiles::load(&root)?, &id)
+        .cloned()
+        .ok_or_else(|| {
+            LaunchError::new(
+                FailureCode::NotFound,
+                "That tile is not saved on this machine.",
+            )
+            .with_action("Save it again")
+        })?;
+
+    let launched = run_launch(
+        &app,
+        state.inner(),
+        RunRequest {
+            target: tile.target.clone(),
+            user_id: tile.account,
+            flags: tile.flags.clone(),
+            client: tile.client.clone(),
+            after: tile.after,
+        },
+    )
+    .await?;
+
+    // The tile that just ran is the one that sorts first next time. A count that
+    // cannot be written is not a reason to call a running launch a failure.
+    if !launched.reused {
+        let mut store = profiles::load(&root)?;
+        profiles::note_used(&mut store, &tile.id, (launch::now_ms() / 1000) as u64);
+        let _ = profiles::save(&root, &store);
+    }
+
+    Ok(launched)
 }
 
 /// Turns the multi-instance lock on or off and remembers the answer.
@@ -1801,6 +1948,10 @@ pub fn run() {
             launch_start,
             launch_multi_instance,
             launch_state,
+            profiles_list,
+            profiles_save,
+            profiles_delete,
+            profiles_launch,
             gpu_view,
             gpu_pin,
             discovery_home,

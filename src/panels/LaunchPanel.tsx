@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Badge, Row, Section } from "../components/Panel";
+import { Tiles } from "../components/Tiles";
 import { Toggle } from "../components/Toggle";
 import { api, CommandError, failureDetail } from "../lib/ipc";
 import type { Launched, LaunchReading } from "../lib/types";
@@ -99,6 +100,22 @@ export function LaunchBody() {
     return () => window.clearTimeout(timer);
   }, [target]);
 
+  // The library's own record of what this machine ran, written here because the page
+  // is the only place that knows which game a place id belonged to. A lost log line
+  // never becomes a failed launch: the client is already starting.
+  const record = (launched: Launched, accountId: number | null) => {
+    if (!launched.place) return;
+    const detail = useDiscovery.getState().detail;
+    const known = detail && detail.place === launched.place ? detail : null;
+    void useLibrary.getState().record({
+      place: launched.place,
+      universe: known?.universe ?? null,
+      name: known?.name ?? null,
+      mode: launched.mode,
+      account: accountId,
+    });
+  };
+
   const play = async () => {
     const text = target.trim();
     if (!text || working) return;
@@ -108,21 +125,7 @@ export function LaunchBody() {
     try {
       const launched = await api.launchStart(text, chosen?.userId ?? null);
       setDone(launched);
-
-      // The library's own record of what this machine ran, written here because the
-      // page is the only place that knows which game a place id belonged to. A lost
-      // log line never becomes a failed launch: the client is already starting.
-      if (launched.place) {
-        const detail = useDiscovery.getState().detail;
-        const known = detail && detail.place === launched.place ? detail : null;
-        void useLibrary.getState().record({
-          place: launched.place,
-          universe: known?.universe ?? null,
-          name: known?.name ?? null,
-          mode: launched.mode,
-          account: chosen?.userId ?? null,
-        });
-      }
+      record(launched, chosen?.userId ?? null);
     } catch (value) {
       const failure = value instanceof CommandError ? value : null;
       setLaunchProblem({
@@ -138,6 +141,8 @@ export function LaunchBody() {
 
   return (
     <>
+      <Tiles seed={target} accounts={list} onLaunched={record} />
+
       <Section title="Where to">
         <div className="px-3.5 py-3">
           <label htmlFor="target" className="text-[13px] text-body">

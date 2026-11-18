@@ -195,6 +195,24 @@ export type Launched = {
   gpu?: string | null;
 };
 
+/**
+ * One saved launch: a destination plus the answers that would otherwise be picked
+ * again. `flags` and `client` are names, not copies, so editing those changes what a
+ * tile launches with.
+ */
+export type LaunchTile = {
+  id: string;
+  name: string;
+  target: string;
+  account: number | null;
+  flags: string | null;
+  client: string | null;
+  after: "stay" | "minimize";
+  /** Unix seconds of the last launch, and how many times it has run. */
+  at: number;
+  used: number;
+};
+
 export type LaunchState = {
   /** A game client is running right now. */
   playerRunning: boolean;
@@ -236,7 +254,7 @@ export type FlagHit = {
   honoured: boolean;
 };
 
-export type FlagSource = "account" | "game" | "global";
+export type FlagSource = "launch" | "account" | "game" | "global";
 
 export type FlagRow = {
   key: string;
