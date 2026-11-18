@@ -1,11 +1,27 @@
 /**
  * The opening crystal: one fragment shader, no dependencies, no textures.
  *
- * A raymarched octahedron, chiselled by three planes and shaded with fresnel and
- * an internal tint, over a dust field. It is written against WebGL2 and drawn as a
- * fullscreen triangle from `gl_VertexID`, so there is no vertex buffer, no index
- * buffer and no geometry to upload: the whole intro is one program and five
- * uniforms.
+ * A raymarched shard of glass, and glass rather than a magenta ball: the surface
+ * refracts, the ray is marched through the solid to find where it leaves, and the
+ * exit is dispersed three ways (1.42 / 1.47 / 1.55) before it samples an analytic
+ * environment, so the body has depth, a cold core and a warm edge. Absorption is
+ * Beer-Lambert over the distance actually travelled inside, which is why the thick
+ * middle goes cold while the thin edges stay clear.
+ *
+ * Two details do most of the work and neither needs geometry:
+ *
+ * - **Creases** come from `fwidth` of the surface normal. Inside a facet the normal
+ *   is constant across a pixel quad, so the derivative is zero; on a dihedral edge
+ *   it jumps. The result is a one-pixel highlight on every real intersection, at
+ *   any resolution, for four instructions.
+ * - **The environment is analytic**: a gradient sky, a cold key behind the viewer
+ *   and a gold counter light low left. It is what the reflections and the refracted
+ *   image both sample, so a facet that faces the key shines and its neighbour does
+ *   not, which is the whole illusion.
+ *
+ * It is written against WebGL2 and drawn as a fullscreen triangle from
+ * `gl_VertexID`, so there is no vertex buffer, no index buffer and no geometry to
+ * upload: the whole intro is one program and four uniforms.
  *
  * Performance is the design, not an afterthought:
  *
@@ -17,8 +33,8 @@
  *   room. On a laptop iGPU it settles low; on a desktop GPU it renders full size.
  * - Nothing is drawn while the document is hidden, and the loop stops itself the
  *   moment the canvas is removed.
- * - The march is 56 steps with an early exit at 0.0015, and the shape is one SDF
- *   with two plane subtractions: no textures, no shadow pass, no post chain.
+ * - 64 steps outside, 24 inside, 6 for the normal: one shape, one light rig, no
+ *   shadow pass and no post chain.
  */
 
 export type CrystalHandle = {
@@ -52,38 +68,71 @@ uniform float uForm;
 uniform float uExit;
 out vec4 outColour;
 
+// Crown glass. 1.46 rather than 1.52 because the shard is small and a lower index
+// keeps the refraction inside the frame instead of folding it shut.
+const float IOR = 1.46;
+
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
-// An octahedron, which is a rhombus of three absolute planes.
 float sdOcta(vec3 p, float s) {
   p = abs(p);
   return (p.x + p.y + p.z - s) * 0.5773502692;
 }
 
-float map(vec3 p) {
+// The shard's own frame, so the shape, its creases and its normals all agree.
+vec3 shardSpace(vec3 p) {
   vec3 q = p;
-  q.xz *= rot(uTime * 0.22);
-  q.xy *= rot(sin(uTime * 0.17) * 0.30 + 0.18);
-  q.yz *= rot(0.16);
+  q.xz *= rot(uTime * 0.20);
+  q.xy *= rot(sin(uTime * 0.16) * 0.26 + 0.20);
+  q *= vec3(1.0, 0.88, 1.0);
+  q.xz *= rot(0.18);
+  return q;
+}
 
-  float body = sdOcta(q, 1.05);
+// An octahedron with its crown sheared off and its base cut flat: one broken end,
+// one polished table. Solid, not a shell, because a hollow shape refracts nothing.
+float map(vec3 p) {
+  vec3 q = shardSpace(p);
+  float d = sdOcta(q, 1.0);
+  d = max(d, q.y - 0.58);
+  d = max(d, -q.y - 0.94);
+  return d;
+}
 
-  // Three planes carve the octahedron into a shard: the flat faces catch light in
-  // steps, which is what reads as glass rather than as a ball.
-  body = max(body, q.y - 0.62);
-  body = max(body, -q.y - 1.15);
+// The two kinds of crease this shape has, both exact: the octahedron's own edges,
+// where one axis of the shard frame crosses zero, and the cuts, where the carved
+// plane and the octahedron are equidistant. Continuous functions, so the highlight
+// is a clean line at any resolution. A thresholded screen-space derivative was the
+// first attempt and it drew a dotted line, because on a diagonal edge only some
+// pixels straddle the crease.
+float creaseAt(vec3 p) {
+  vec3 q = shardSpace(p);
 
-  // The cut faces are slightly inset, so the silhouette keeps a thin edge.
-  float bevel = sdOcta(q, 1.11);
-  return max(body, -bevel);
+  float axis = min(min(abs(q.x), abs(q.y)), abs(q.z));
+  float axisEdge = exp(-axis * 92.0);
+
+  float body = sdOcta(q, 1.0);
+  float top = q.y - 0.58;
+  float base = -q.y - 0.94;
+  float cut = min(abs(body - top), abs(body - base));
+  float cutEdge = exp(-cut * 46.0);
+
+  // An edge does not glow evenly. It catches the key along one stretch, throws it,
+  // and falls dark along the next; a constant line reads as a neon stroke, which is
+  // the one thing this must not look like. Both families get their own phase, and the
+  // variation is in the shard's own frame so it turns with the object.
+  float alongA = pow(max(sin(q.y * 7.4 + q.x * 4.1 + 1.3), 0.0), 3.0);
+  float alongB = pow(max(sin(q.z * 9.1 + q.y * 2.3 + 2.1), 0.0), 4.0);
+
+  return clamp(axisEdge * (0.10 + 0.90 * alongA) + cutEdge * (0.10 + 0.90 * alongB), 0.0, 1.0);
 }
 
 vec3 normalAt(vec3 p) {
-  vec2 e = vec2(0.0012, 0.0);
+  vec2 e = vec2(0.004, 0.0);
   return normalize(vec3(
     map(p + e.xyy) - map(p - e.xyy),
     map(p + e.yxy) - map(p - e.yxy),
@@ -91,23 +140,60 @@ vec3 normalAt(vec3 p) {
   ));
 }
 
-// March one ray. Returns the hit distance, or -1, and accumulates a halo so the
-// shape glows into the background without a blur pass.
-float march(vec3 ro, vec3 rd, out float halo, out float edge) {
+// The studio. Deliberately much brighter than the page behind the shard: a product
+// shot lights the object and keeps the lights out of frame, and a shard reflecting a
+// near-black room can only ever be a dark polygon. The page has its own dim
+// function below; this one exists to be reflected and refracted.
+vec3 environment(vec3 d) {
+  float up = smoothstep(-0.75, 0.95, d.y);
+  // The room falls off to nothing below the horizon and opens into a large cool
+  // window above it. The window's edge is what draws a gradient across a flat facet,
+  // and a gradient across a facet is the difference between glass and a colour fill:
+  // a flat facet lit by a flat environment is, pixel for pixel, a vector shape.
+  // The floor is not a void: a page this dark still bounces a little light upward, and
+  // a facet refracting pure black reads as a hole in the object rather than as glass.
+  vec3 floorBounce = vec3(0.030, 0.036, 0.050);
+  vec3 sky = mix(floorBounce, vec3(0.100, 0.130, 0.205), up);
+
+  float window = smoothstep(-0.30, 0.28, d.y) * (1.0 - smoothstep(0.55, 1.05, abs(d.x)));
+  sky += vec3(0.52, 0.62, 0.84) * window * 0.90;
+
+  // The key, as a hard point and as a soft halo around it.
+  float key = max(dot(d, normalize(vec3(0.52, 0.60, 0.82))), 0.0);
+  sky += vec3(1.0, 1.0, 1.0) * pow(key, 420.0) * 6.0;
+  sky += vec3(0.85, 0.92, 1.0) * pow(key, 18.0) * 0.55;
+
+  // The gold counter light, which is the only warm thing in the scene.
+  float gold = max(dot(d, normalize(vec3(-0.78, 0.10, 0.44))), 0.0);
+  sky += vec3(1.0, 0.72, 0.34) * pow(gold, 16.0) * 0.50;
+  sky += vec3(1.0, 0.82, 0.52) * pow(gold, 200.0) * 2.20;
+
+  return sky;
+}
+
+// The page, in screen space, so it can be sampled through the glass.
+vec3 backdropBase(vec2 uv) {
+  return mix(vec3(0.031, 0.036, 0.050), vec3(0.008, 0.010, 0.016), length(uv) * 0.9);
+}
+
+float dust(vec2 frag) {
+  vec2 cell = floor(frag / 2.0);
+  float spark = step(0.9965, hash(cell));
+  float twinkle = 0.5 + 0.5 * sin(uTime * 1.7 + hash(cell) * 40.0);
+  return spark * twinkle * 0.10;
+}
+
+float march(vec3 ro, vec3 rd, out float halo) {
   float t = 0.0;
   halo = 0.0;
-  edge = 0.0;
 
-  for (int i = 0; i < 56; i++) {
+  for (int i = 0; i < 64; i++) {
     vec3 p = ro + rd * t;
     float d = map(p);
     halo += exp(-abs(d) * 22.0) * 0.012;
 
-    if (abs(d) < 0.0015) {
-      edge = clamp(1.0 - float(i) / 56.0, 0.0, 1.0);
-      return t;
-    }
-    t += d * 0.85;
+    if (abs(d) < 0.0022) return t;
+    t += d * 0.9;
     if (t > 7.0) break;
   }
   return -1.0;
@@ -118,69 +204,121 @@ void main() {
   float form = clamp(uForm, 0.0, 1.0);
   float exit = clamp(uExit, 0.0, 1.0);
 
-  // The camera starts close and pulls back as the shard forms; the exit pushes it
-  // through the shard instead, so leaving is the same move as arriving, reversed.
-  // The splash window is 520 wide, so the shard is framed to fit inside it: a
-  // shape that overflows the frame shows one facet and reads as a dark wall.
+  // The camera pulls back as the shard forms; the exit pushes it through instead,
+  // so leaving is the same move as arriving, reversed.
   float dist = mix(6.2, 4.1, smoothstep(0.0, 1.0, form)) * (1.0 - exit * 0.82);
-  vec3 ro = vec3(0.0, 0.12, dist);
+  vec3 ro = vec3(0.0, 0.10, dist);
   vec3 rd = normalize(vec3(uv, -1.35));
 
-  float halo, edge;
-  float hit = march(ro, rd, halo, edge);
+  float halo;
+  float hit = march(ro, rd, halo);
 
-  // Background: cold dark, with a faint dust field that only shows once the scene
-  // has started forming.
-  vec3 colour = mix(vec3(0.031, 0.036, 0.050), vec3(0.008, 0.010, 0.016), length(uv) * 0.9);
+  vec3 colour = backdropBase(uv);
 
-  vec2 cell = floor(gl_FragCoord.xy / 2.0);
-  float spark = step(0.9965, hash(cell));
-  float twinkle = 0.5 + 0.5 * sin(uTime * 1.7 + hash(cell) * 40.0);
-  colour += spark * twinkle * 0.10 * form * vec3(0.72, 0.80, 1.0);
+  // A soft contact shadow under the shard. Without one a lit object floats, and a
+  // floating object reads as a sticker no matter how good its refractions are.
+  colour *= 1.0 - 0.55 * exp(-length((uv - vec2(0.0, -0.60)) * vec2(2.0, 5.5)) * 3.2) * form;
 
+  // A trace of the studio in the page itself: reflections with no visible source are
+  // the reason a lit shape can still read as pasted on. Eight percent is enough to
+  // place the light and far too little to compete with the wordmark.
+  colour += environment(rd) * 0.08 * form;
+
+  colour += dust(gl_FragCoord.xy) * form * vec3(0.72, 0.80, 1.0);
   colour += halo * form * vec3(0.34, 0.50, 0.95);
 
   if (hit > 0.0) {
     vec3 p = ro + rd * hit;
-    vec3 n = normalAt(p);
-    float fresnel = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.6);
+    vec3 n1 = normalAt(p);
+    float cosv = clamp(dot(n1, -rd), 0.0, 1.0);
+    float fresnel = 0.04 + 0.96 * pow(1.0 - cosv, 5.0);
 
-    // Flat faces: snap the normal so the facets read as cut planes, not as a
-    // smooth blob. 0.22 is one facet's worth of quantisation at this size.
-    vec3 facet = normalize(floor(n / 0.22) * 0.22 + 0.11);
+    vec3 tile = floor(n1 * 5.0 + 0.5);
+    float face = hash(tile.xy + tile.z * 13.7) - 0.5;
 
-    float key = clamp(dot(facet, normalize(vec3(0.55, 0.9, 0.6))), 0.0, 1.0);
-    float fill = clamp(dot(facet, normalize(vec3(-0.6, -0.2, 0.7))), 0.0, 1.0);
-    float rim = pow(clamp(dot(facet, normalize(vec3(-0.7, 0.3, 0.5))), 0.0, 1.0), 2.2);
+    float crease = creaseAt(p);
 
-    // Three lights on purpose: a cold key from above, a weak fill from the lower
-    // left so the cut faces never go fully black, and a gold rim that is the only
-    // warm thing in an otherwise blue scene.
-    vec3 body = vec3(0.26, 0.40, 0.66) * (0.55 + key * 1.45) + vec3(0.07, 0.10, 0.18) * fill;
-    vec3 sheen = vec3(0.80, 0.62, 0.30) * rim * 0.85;
-    vec3 glass = mix(body, vec3(0.72, 0.88, 1.20), fresnel * 0.90);
+    // Refract in, cross the volume, refract out. The march stops at the far wall,
+    // so the cost is paid once per pixel and not once per light.
+    vec3 inside = refract(rd, n1, 1.0 / IOR);
+    float thickness = 0.0;
+    vec3 pe = p;
+    vec3 n2 = -n1;
+    bool exited = false;
+    for (int i = 0; i < 40; i++) {
+      pe = p + inside * thickness;
+      float d = map(pe);
+      if (d > -0.003) { exited = true; break; }
+      thickness += max(-d * 1.2, 0.038);
+    }
+    if (exited) {
+      n2 = normalAt(pe);
+      if (dot(n2, inside) < 0.0) n2 = -n2;
+    }
 
-    // A tight specular lobe on the snapped facet normal is what separates glass
-    // from matte plastic: the highlight is small, hard and moves with the rotation.
-    vec3 half = normalize(normalize(vec3(0.55, 0.9, 0.6)) - rd);
-    float spec = pow(clamp(dot(facet, half), 0.0, 1.0), 96.0);
-    float spec2 = pow(clamp(dot(facet, normalize(normalize(vec3(-0.7, 0.3, 0.5)) - rd)), 0.0, 1.0), 48.0);
+    // Dispersion: three exits, three indices. Red bends least, blue most.
+    vec3 outR = refract(inside, n2, 1.42);
+    vec3 outG = refract(inside, n2, 1.47);
+    vec3 outB = refract(inside, n2, 1.55);
+    if (dot(outR, outR) < 0.001 || dot(outG, outG) < 0.001 || dot(outB, outB) < 0.001) {
+      // Total internal reflection: at this angle the surface is a mirror, and
+      // pretending otherwise is what makes fake glass look like plastic.
+      outR = reflect(inside, n2);
+      outG = outR;
+      outB = outR;
+    }
+    vec3 transmit = vec3(environment(outR).r, environment(outG).g, environment(outB).b);
 
-    colour = mix(colour, glass + sheen, 0.96);
-    colour += spec * vec3(1.0, 0.99, 0.96) * 2.6;
-    colour += spec2 * vec3(1.0, 0.86, 0.62) * 0.9;
-    colour += fresnel * vec3(0.75, 0.88, 1.0) * 1.05;
-    // Internal light: the facet just under the surface picks up the cold body and
-    // gives the shard something to look like it is made of.
-    colour += glass * 0.22;
-    colour += edge * 0.14 * vec3(0.85, 0.93, 1.0);
+    // The page, seen through the shard and pushed aside by the refraction. This is
+    // the cue that separates transparent from painted: the dust field behind moves
+    // as the shard turns, because it is being looked at through an index of 1.46.
+    vec3 behind = backdropBase(uv + outG.xy * 0.20) * 1.7;
+    behind += dust(gl_FragCoord.xy + outG.xy * 36.0) * form * vec3(0.72, 0.80, 1.0) * 2.2;
+
+    // Beer-Lambert, red absorbed first: thick parts go cold, thin edges stay clear.
+    vec3 absorb = exp(-max(thickness, 0.0) * vec3(1.15, 0.62, 0.38));
+    vec3 body = (transmit * 1.35 + behind) * absorb * (1.0 + face * 0.18);
+
+    // The inner wall is not a window. At grazing angles it mirrors the outside of
+    // the shard, seen from inside, and those bright facets shining through the body
+    // are most of what a crystal looks like in a photograph.
+    vec3 innerWall = environment(reflect(inside, n2));
+    float grazing = pow(1.0 - abs(dot(inside, n2)), 2.0);
+    body += innerWall * absorb * grazing * 0.95;
+
+    // Glass is thinner toward every edge, and thin glass lets light out: a wide band
+    // under the crease line gives each facet a gradient instead of a flat fill.
+    vec3 q = shardSpace(p);
+    float wide = min(min(abs(q.x), abs(q.y)), abs(q.z));
+    body *= 1.0 + exp(-wide * 6.0) * 0.55;
+
+    // Reflections with a floor. Physically a head-on facet returns 4%, which at
+    // this size is invisible, and a crystal whose reflections are invisible reads
+    // as a coloured polygon. The floor is what makes neighbouring facets differ by
+    // a stop or more, and that difference is the sparkle.
+    vec3 refl = environment(reflect(rd, n1)) * (0.72 + face * 1.05);
+    float mirror = max(fresnel, 0.34);
+
+    vec3 h = normalize(normalize(vec3(0.52, 0.60, 0.82)) - rd);
+    float spec = pow(clamp(dot(n1, h), 0.0, 1.0), 90.0);
+    float glint = pow(clamp(dot(n1, h), 0.0, 1.0), 900.0);
+    float rim = pow(1.0 - cosv, 3.0);
+
+    colour = mix(body, refl, mirror);
+    colour += spec * vec3(0.90, 0.95, 1.0) * 0.55;
+    colour += glint * vec3(1.0, 0.99, 0.96) * 3.2;
+    colour += rim * vec3(0.42, 0.56, 0.80) * 0.95;
+    colour += crease * vec3(0.90, 0.96, 1.0) * 0.95;
   }
+
+  // A pool of light under the shard: what it transmits, it focuses, and the spot is
+  // the cue that this is a lens rather than a sticker.
+  colour += vec3(0.50, 0.66, 1.0) * exp(-length((uv - vec2(0.0, -0.34)) * vec2(1.7, 1.05)) * 6.0) * 0.12 * form;
 
   // The exit is a flash, then nothing: the app is already underneath.
   colour += exit * vec3(0.55, 0.62, 0.80) * 0.55;
   colour *= 1.0 - exit * 0.85;
 
-  // A slight vignette keeps the wordmark legible over the centre.
   colour *= 1.0 - 0.22 * smoothstep(0.45, 1.25, length(uv));
 
   outColour = vec4(colour, 1.0);
