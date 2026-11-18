@@ -155,11 +155,7 @@ function Catalog() {
                     ) : (
                       <span className="num"> · default {hit.default}</span>
                     )}
-                    {hit.honoured ? (
-                      <span> · the client honours this one</span>
-                    ) : (
-                      <span> · written, then ignored: not on the allowlist</span>
-                    )}
+                    {hit.honoured ? null : <span className="text-gold/80"> · ignored</span>}
                   </div>
                 </div>
                 <button
@@ -560,7 +556,7 @@ function Write() {
       <div className="px-3.5 py-2.5">
         <p className="text-[11px] leading-[1.55] text-muted">
           One file, the copy inside the build that will run. The per-user file beside the
-          versions folder is not read by this client any more — measured, not assumed.
+          versions folder is not read by this client any more. That is measured, not assumed.
         </p>
         <p className="mt-1.5 text-[11px] leading-[1.55] text-muted">
           Roblox allowlists local overrides: this client honours{" "}
