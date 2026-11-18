@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { Badge, PanelFrame, Row, Section } from "../components/Panel";
+import { Badge, Row, Section } from "../components/Panel";
 import { Toggle } from "../components/Toggle";
 import { api, CommandError, failureDetail } from "../lib/ipc";
 import type { Launched, LaunchReading } from "../lib/types";
@@ -15,9 +15,7 @@ import { useShell } from "../store/shell";
  * shown as words, not as a request name, and the account row says which session
  * the ticket will be minted from.
  */
-export function LaunchPanel() {
-  const open = useShell((state) => state.launchOpen);
-  const close = useShell((state) => state.closeLaunch);
+export function LaunchBody() {
   const settings = useShell((state) => state.settings);
   const toggleMulti = useShell((state) => state.setMultiInstance);
 
@@ -39,23 +37,26 @@ export function LaunchPanel() {
   const field = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!open) return;
     void load();
     setDone(null);
     setLaunchProblem(null);
-    const timer = window.setTimeout(() => field.current?.focus(), 120);
+    // The field is the point of this page, so it takes focus. Unless something
+    // else has opened in the meantime: being pulled out of the palette by a
+    // timer is the kind of small theft that makes an app feel broken.
+    const timer = window.setTimeout(() => {
+      if (!useShell.getState().paletteOpen) field.current?.focus();
+    }, 120);
     return () => window.clearTimeout(timer);
-  }, [open, load]);
+  }, [load]);
 
   // Whether a game is already running decides what Play will do, so it is read
   // rather than guessed at from a setting.
   useEffect(() => {
-    if (!open) return;
     void api
       .launchState()
       .then((state) => setRunning(state.playerRunning))
       .catch(() => setRunning(false));
-  }, [open, settings?.launch.multiInstance]);
+  }, [settings?.launch.multiInstance]);
 
   const list = accounts ?? [];
   const chosen = list.find((entry) => entry.userId === account) ?? list.find((entry) => entry.isDefault) ?? list[0];
@@ -107,12 +108,10 @@ export function LaunchPanel() {
     }
   };
 
-  if (!open) return null;
-
   const ready = Boolean(reading) && Boolean(chosen) && !working;
 
   return (
-    <PanelFrame title="Launch" onClose={close}>
+    <>
       <Section title="Where to">
         <div className="px-3.5 py-3">
           <label htmlFor="target" className="text-[13px] text-body">
@@ -162,7 +161,7 @@ export function LaunchPanel() {
         aside={
           <button
             type="button"
-            onClick={() => useShell.getState().openAccounts()}
+            onClick={() => useShell.getState().go("accounts")}
             className="ui -mt-1 h-6 rounded-control px-2 text-[11px] text-muted hover:bg-white/5 hover:text-body"
           >
             {list.length > 0 ? "Manage" : "Add an account"}
@@ -212,7 +211,7 @@ export function LaunchPanel() {
           {list.length === 0 ? (
             <button
               type="button"
-              onClick={() => useShell.getState().openAccounts()}
+              onClick={() => useShell.getState().go("accounts")}
               className="ui h-9 w-full rounded-control bg-gold text-[13px] font-semibold text-page hover:bg-[#f0cd7c]"
             >
               Add an account
@@ -277,6 +276,6 @@ export function LaunchPanel() {
           A game is running right now, so Play will say so instead of opening a second window.
         </p>
       ) : null}
-    </PanelFrame>
+    </>
   );
 }

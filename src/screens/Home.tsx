@@ -4,7 +4,7 @@ import { useShell } from "../store/shell";
 
 export function HomeScreen() {
   const settings = useShell((state) => state.settings);
-  const openLaunch = useShell((state) => state.openLaunch);
+  const go = useShell((state) => state.go);
   const name = settings?.identity.name.trim() ?? "";
   const charts = listNames(settings?.identity.genres ?? []);
 
@@ -23,7 +23,7 @@ export function HomeScreen() {
 
         <button
           type="button"
-          onClick={openLaunch}
+          onClick={() => go("launch")}
           className="ui mt-1 h-8 shrink-0 rounded-control bg-gold px-3 text-[12px] font-semibold text-page hover:bg-[#f0cd7c]"
         >
           Launch a place

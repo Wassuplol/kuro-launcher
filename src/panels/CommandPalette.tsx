@@ -3,11 +3,36 @@ import { Command } from "cmdk";
 import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, Home, Library, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 
-import { PAGE_LABEL, PAGES } from "../app/router";
+import { PAGE_LABEL, PAGES, type Page } from "../app/router";
 import { ENTER } from "../lib/motion";
 import { useShell } from "../store/shell";
 
-const ICONS = { home: Home, search: Search, library: Library, friends: Users };
+const ICONS = {
+  home: Home,
+  search: Search,
+  library: Library,
+  friends: Users,
+  launch: Play,
+  accounts: UserRound,
+  flags: SlidersHorizontal,
+  versions: PackageCheck,
+};
+
+/**
+ * Words a person might type that are not in the page's own name. "play" for
+ * Launch, "fastflags" for Flags: the palette is where somebody who has not
+ * learned the rail yet will look first.
+ */
+const KEYWORDS: Record<Page, string> = {
+  home: "start overview",
+  search: "find games people",
+  library: "saved shelf",
+  friends: "social presence",
+  launch: "play join game place server private invite",
+  accounts: "sign in cookie session add account",
+  flags: "fastflags configure tune profile",
+  versions: "client install update repair prune",
+};
 
 const win = getCurrentWindow();
 
@@ -16,10 +41,6 @@ export function CommandPalette() {
   const close = useShell((state) => state.closePalette);
   const go = useShell((state) => state.go);
   const openSettings = useShell((state) => state.openSettings);
-  const openVersions = useShell((state) => state.openVersions);
-  const openAccounts = useShell((state) => state.openAccounts);
-  const openLaunch = useShell((state) => state.openLaunch);
-  const openFlags = useShell((state) => state.openFlags);
   const openOnboarding = useShell((state) => state.openOnboarding);
   const openDataRoot = useShell((state) => state.openDataRoot);
   const settings = useShell((state) => state.settings);
@@ -62,7 +83,7 @@ export function CommandPalette() {
                 return (
                   <Command.Item
                     key={page}
-                    value={`go ${PAGE_LABEL[page]}`}
+                    value={`${PAGE_LABEL[page]} ${KEYWORDS[page]}`}
                     onSelect={() => go(page)}
                   >
                     <Icon size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
@@ -85,49 +106,9 @@ export function CommandPalette() {
                 <span>Open settings</span>
               </Command.Item>
 
-              <Command.Item
-                value="launch play join game place server"
-                onSelect={() => {
-                  close();
-                  openLaunch();
-                }}
-              >
-                <Play size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
-                <span>Launch a place</span>
-              </Command.Item>
 
-              <Command.Item
-                value="open accounts sign in add account"
-                onSelect={() => {
-                  close();
-                  openAccounts();
-                }}
-              >
-                <UserRound size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
-                <span>Open accounts</span>
-              </Command.Item>
 
-              <Command.Item
-                value="flags fastflags configure tune"
-                onSelect={() => {
-                  close();
-                  openFlags();
-                }}
-              >
-                <SlidersHorizontal size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
-                <span>Open flags</span>
-              </Command.Item>
 
-              <Command.Item
-                value="open roblox versions client"
-                onSelect={() => {
-                  close();
-                  openVersions();
-                }}
-              >
-                <PackageCheck size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
-                <span>Open Roblox versions</span>
-              </Command.Item>
 
               <Command.Item
                 value="open data folder"

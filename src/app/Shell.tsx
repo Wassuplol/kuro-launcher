@@ -1,7 +1,17 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useHotkeys } from "react-hotkeys-hook";
-import { Home, Library, Search, Settings, Users } from "lucide-react";
+import {
+  Home,
+  Library,
+  PackageCheck,
+  Play,
+  Search,
+  Settings,
+  SlidersHorizontal,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { motion } from "motion/react";
 import type { ComponentType } from "react";
 
@@ -13,10 +23,14 @@ import { useReducedMotion } from "../lib/useReducedMotion";
 import { PAGE_LABEL, type Page } from "./router";
 import { useShell } from "../store/shell";
 
+import { AccountsScreen } from "../screens/Accounts";
+import { FlagsScreen } from "../screens/Flags";
 import { FriendsScreen } from "../screens/Friends";
 import { HomeScreen } from "../screens/Home";
+import { LaunchScreen } from "../screens/Launch";
 import { LibraryScreen } from "../screens/Library";
 import { SearchScreen } from "../screens/Search";
+import { VersionsScreen } from "../screens/Versions";
 
 const win = getCurrentWindow();
 
@@ -27,11 +41,27 @@ const RAIL: { page: Page; icon: typeof Home; shortcut: string }[] = [
   { page: "friends", icon: Users, shortcut: "Ctrl 4" },
 ];
 
+/**
+ * The rail used to point at four pages and hide every working verb behind
+ * Ctrl+K. These are the things that do something today, so they sit on the rail
+ * beside the pages and keep their palette entries as the second door.
+ */
+const TOOLS: { page: Page; label: string; icon: typeof Home; shortcut: string }[] = [
+  { page: "launch", label: "Launch a place", icon: Play, shortcut: "Ctrl 5" },
+  { page: "accounts", label: "Accounts", icon: UserRound, shortcut: "Ctrl 6" },
+  { page: "flags", label: "Flags", icon: SlidersHorizontal, shortcut: "Ctrl 7" },
+  { page: "versions", label: "Roblox versions", icon: PackageCheck, shortcut: "Ctrl 8" },
+];
+
 const SCREENS: Record<Page, ComponentType> = {
   home: HomeScreen,
   search: SearchScreen,
   library: LibraryScreen,
   friends: FriendsScreen,
+  launch: LaunchScreen,
+  accounts: AccountsScreen,
+  flags: FlagsScreen,
+  versions: VersionsScreen,
 };
 
 function TitleBar() {
@@ -75,8 +105,8 @@ function Rail() {
 
   return (
     <nav
-      aria-label="Pages"
-      className="row-start-2 flex flex-col items-center gap-1 border-r border-white/8 pt-3 pb-3"
+      aria-label="Main"
+      className="row-start-2 flex flex-col items-center gap-1 overflow-y-auto border-r border-white/8 pt-3 pb-3"
     >
       <Tooltip.Provider delayDuration={400}>
         {RAIL.map((item) => (
@@ -90,7 +120,20 @@ function Rail() {
           />
         ))}
 
-        <div className="mt-auto">
+        <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-white/10" />
+
+        {TOOLS.map((tool) => (
+          <RailItem
+            key={tool.page}
+            label={tool.label}
+            shortcut={tool.shortcut}
+            icon={tool.icon}
+            active={page === tool.page}
+            onClick={() => go(tool.page)}
+          />
+        ))}
+
+        <div className="mt-auto shrink-0 pt-2">
           <RailItem
             label="Settings"
             icon={Settings}
@@ -131,6 +174,10 @@ export function Shell() {
   useHotkeys("ctrl+2", () => go("search"), { preventDefault: true });
   useHotkeys("ctrl+3", () => go("library"), { preventDefault: true });
   useHotkeys("ctrl+4", () => go("friends"), { preventDefault: true });
+  useHotkeys("ctrl+5", () => go("launch"), { preventDefault: true });
+  useHotkeys("ctrl+6", () => go("accounts"), { preventDefault: true });
+  useHotkeys("ctrl+7", () => go("flags"), { preventDefault: true });
+  useHotkeys("ctrl+8", () => go("versions"), { preventDefault: true });
   // The hotkey library matches physical key codes, so the search key is
   // "slash", not "/". Layout independent, which is what a launcher wants.
   useHotkeys("slash", () => go("search"), { preventDefault: true });
@@ -148,9 +195,10 @@ export function Shell() {
     "escape",
     () => {
       const state = useShell.getState();
+      // Only overlays close on Escape. A page is a place you are, not a layer
+      // on top of one, so Escape never throws you out of it.
       if (state.paletteOpen) closePalette();
       else if (state.settingsOpen) closeSettings();
-      else if (state.versionsOpen) useShell.getState().closeVersions();
     },
     { enableOnFormTags: true },
   );

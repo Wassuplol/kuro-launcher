@@ -1,7 +1,7 @@
 import { Check, HardDriveDownload, RefreshCw, ShieldCheck, Trash2, Wrench } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { Badge, PanelFrame, Row, Section } from "../components/Panel";
+import { Badge, Row, Section } from "../components/Panel";
 import { cn } from "../lib/cn";
 import { bytes, clock, day } from "../lib/format";
 import type {
@@ -26,11 +26,9 @@ const METHOD_LABEL: Record<InstallMethod, { title: string; detail: string }> = {
   },
 };
 
-export function VersionsPanel() {
-  // The shell owns every overlay, so it owns this one too. The versions store
-  // holds only what was read from Roblox and from the disk.
-  const open = useShell((state) => state.versionsOpen);
-  const close = useShell((state) => state.closeVersions);
+export function VersionsBody() {
+  // The versions store holds only what was read from Roblox and from the disk;
+  // this page owns no state of its own.
   const load = useVersions((state) => state.load);
   const refresh = useVersions((state) => state.refresh);
   const livePlayer = useVersions((state) => state.snapshot?.livePlayer ?? null);
@@ -41,29 +39,23 @@ export function VersionsPanel() {
   const asked = useRef(false);
 
   useEffect(() => {
-    if (!open) {
-      asked.current = false;
-      return;
-    }
     void load();
-  }, [open, load]);
+  }, [load]);
 
   useEffect(() => {
-    if (!open || livePlayer || asked.current) return;
+    if (livePlayer || asked.current) return;
     asked.current = true;
     void refresh();
-  }, [open, livePlayer, refresh]);
-
-  if (!open) return null;
+  }, [livePlayer, refresh]);
 
   return (
-    <PanelFrame title="Versions" onClose={close}>
+    <>
       <Serving />
       <Install />
       <OnThisMachine />
       <Space />
       <Studio />
-    </PanelFrame>
+    </>
   );
 }
 

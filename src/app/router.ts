@@ -1,4 +1,13 @@
-export const PAGES = ["home", "search", "library", "friends"] as const;
+export const PAGES = [
+  "home",
+  "search",
+  "library",
+  "friends",
+  "launch",
+  "accounts",
+  "flags",
+  "versions",
+] as const;
 
 export type Page = (typeof PAGES)[number];
 
@@ -7,6 +16,10 @@ export const PAGE_LABEL: Record<Page, string> = {
   search: "Search",
   library: "Library",
   friends: "Friends",
+  launch: "Launch",
+  accounts: "Accounts",
+  flags: "Flags",
+  versions: "Versions",
 };
 
 export function pageFromHash(hash: string): Page {

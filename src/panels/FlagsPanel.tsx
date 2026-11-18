@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { Badge, PanelFrame, Row, Section } from "../components/Panel";
+import { Badge, Row, Section } from "../components/Panel";
 import { Toggle } from "../components/Toggle";
 import { cn } from "../lib/cn";
 import { ago } from "../lib/format";
 import type { FlagKind } from "../lib/types";
 import { useAccounts } from "../store/accounts";
 import { useFlags } from "../store/flags";
-import { useShell } from "../store/shell";
 
 /**
  * Flags: the catalogue, the profile being edited, where it applies, and what is
@@ -44,21 +43,17 @@ function defaultValue(kind: FlagKind, served: string | null): unknown | undefine
   }
 }
 
-export function FlagsPanel() {
-  const open = useShell((state) => state.flagsOpen);
-  const close = useShell((state) => state.closeFlags);
+export function FlagsBody() {
   const view = useFlags((state) => state.view);
   const load = useFlags((state) => state.load);
   const accounts = useAccounts((state) => state.accounts);
 
   useEffect(() => {
-    if (open) void load();
-  }, [open, load]);
-
-  if (!open) return null;
+    void load();
+  }, [load]);
 
   return (
-    <PanelFrame title="Flags" onClose={close}>
+    <>
       {view?.recovered ? (
         <div className="mt-4 rounded-card border border-white/10 bg-raised px-3.5 py-2.5 text-[11px] leading-[1.55] text-muted">
           Your client's own settings were put back on this start. The last session ended before
@@ -76,7 +71,7 @@ export function FlagsPanel() {
         <Write />
       </div>
       <div className="h-2" aria-hidden />
-    </PanelFrame>
+    </>
   );
 }
 

@@ -5,6 +5,11 @@ import { pageFromHash, reflect, type Page } from "../app/router";
 import { api, CommandError, detailOf, failureDetail } from "../lib/ipc";
 import type { AppInfo, Settings } from "../lib/types";
 
+/**
+ * The shell owns navigation and the two things that really are overlays: the
+ * command palette and settings. Everything else is a page, so it is a place in
+ * the window rather than a sheet over it.
+ */
 type ShellState = {
   ready: boolean;
   info: AppInfo | null;
@@ -13,10 +18,6 @@ type ShellState = {
   page: Page;
   paletteOpen: boolean;
   settingsOpen: boolean;
-  versionsOpen: boolean;
-  accountsOpen: boolean;
-  launchOpen: boolean;
-  flagsOpen: boolean;
   onboardingOpen: boolean;
 
   boot: () => Promise<void>;
@@ -25,14 +26,6 @@ type ShellState = {
   closePalette: () => void;
   openSettings: () => void;
   closeSettings: () => void;
-  openVersions: () => void;
-  closeVersions: () => void;
-  openAccounts: () => void;
-  closeAccounts: () => void;
-  openLaunch: () => void;
-  closeLaunch: () => void;
-  openFlags: () => void;
-  closeFlags: () => void;
   openOnboarding: () => void;
   closeOnboarding: () => void;
   setMultiInstance: (enabled: boolean) => Promise<void>;
@@ -49,10 +42,6 @@ export const useShell = create<ShellState>()((set, get) => ({
   page: pageFromHash(window.location.hash),
   paletteOpen: false,
   settingsOpen: false,
-  versionsOpen: false,
-  accountsOpen: false,
-  launchOpen: false,
-  flagsOpen: false,
   onboardingOpen: false,
 
   boot: async () => {
@@ -74,66 +63,17 @@ export const useShell = create<ShellState>()((set, get) => ({
     }
   },
 
+  // Going anywhere closes the overlays. It does not close a page, because a
+  // page is what you are looking at, not something on top of it.
   go: (page) => {
     reflect(page);
-    set({
-      page,
-      paletteOpen: false,
-      settingsOpen: false,
-      versionsOpen: false,
-      accountsOpen: false,
-      launchOpen: false,
-    });
+    set({ page, paletteOpen: false, settingsOpen: false });
   },
 
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
-  openSettings: () =>
-    set({
-      settingsOpen: true,
-      versionsOpen: false,
-      accountsOpen: false,
-      launchOpen: false,
-      flagsOpen: false,
-    }),
+  openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
-  openVersions: () =>
-    set({
-      versionsOpen: true,
-      settingsOpen: false,
-      paletteOpen: false,
-      accountsOpen: false,
-      launchOpen: false,
-    }),
-  closeVersions: () => set({ versionsOpen: false }),
-  openAccounts: () =>
-    set({
-      accountsOpen: true,
-      settingsOpen: false,
-      paletteOpen: false,
-      versionsOpen: false,
-      launchOpen: false,
-    }),
-  closeAccounts: () => set({ accountsOpen: false }),
-  openLaunch: () =>
-    set({
-      launchOpen: true,
-      settingsOpen: false,
-      paletteOpen: false,
-      versionsOpen: false,
-      accountsOpen: false,
-    }),
-  closeLaunch: () => set({ launchOpen: false }),
-  openFlags: () =>
-    set({
-      flagsOpen: true,
-      settingsOpen: false,
-      paletteOpen: false,
-      versionsOpen: false,
-      accountsOpen: false,
-      launchOpen: false,
-    }),
-  closeFlags: () => set({ flagsOpen: false }),
   openOnboarding: () => set({ onboardingOpen: true, settingsOpen: false, paletteOpen: false }),
   closeOnboarding: () => set({ onboardingOpen: false }),
 

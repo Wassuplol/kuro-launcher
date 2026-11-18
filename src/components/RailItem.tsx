@@ -11,10 +11,16 @@ type Props = {
   shortcut?: string;
   icon: LucideIcon;
   active?: boolean;
+  /**
+   * The left marker. Pages get it because they are the live surface; a drawer
+   * floats over a page that stays live, so two markers at once would claim two
+   * current things.
+   */
+  bar?: boolean;
   onClick: () => void;
 };
 
-export function RailItem({ label, shortcut, icon: Icon, active, onClick }: Props) {
+export function RailItem({ label, shortcut, icon: Icon, active, bar = true, onClick }: Props) {
   const iconRef = useRef<SVGSVGElement>(null);
   const reduced = useReducedMotion();
 
@@ -37,7 +43,7 @@ export function RailItem({ label, shortcut, icon: Icon, active, onClick }: Props
             active ? "bg-white/5 text-gold" : "text-muted hover:bg-white/5 hover:text-body",
           )}
         >
-          {active ? (
+          {active && bar ? (
             <span
               aria-hidden
               className="absolute -left-2 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-full bg-gold"

@@ -1,7 +1,7 @@
 import { Check, KeyRound, ShieldCheck, Star, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Badge, PanelFrame, Row, Section } from "../components/Panel";
+import { Badge, Row, Section } from "../components/Panel";
 import { QuickLogin } from "../components/QuickLogin";
 import { cn } from "../lib/cn";
 import { day } from "../lib/format";
@@ -17,22 +17,18 @@ import { useShell } from "../store/shell";
  * that echoes it, because every one of those would be a way to leak a session
  * that lives in the vault on purpose.
  */
-export function AccountsPanel() {
-  const open = useShell((state) => state.accountsOpen);
-  const close = useShell((state) => state.closeAccounts);
+export function AccountsBody() {
   const load = useAccounts((state) => state.load);
 
   useEffect(() => {
-    if (open) void load();
-  }, [open, load]);
-
-  if (!open) return null;
+    void load();
+  }, [load]);
 
   return (
-    <PanelFrame title="Accounts" onClose={close}>
+    <>
       <AddAccount />
       <Saved />
-    </PanelFrame>
+    </>
   );
 }
 
@@ -247,18 +243,17 @@ function AccountRow({ account }: { account: AccountView }) {
 export function useAccountStrip(): AccountView[] {
   const accounts = useAccounts((state) => state.accounts);
   const load = useAccounts((state) => state.load);
-  const open = useShell((state) => state.accountsOpen);
 
   useEffect(() => {
     if (accounts === null) void load();
-  }, [accounts, load, open]);
+  }, [accounts, load]);
 
   return accounts ?? [];
 }
 
 export function AccountStrip() {
   const accounts = useAccountStrip();
-  const openAccounts = useShell((state) => state.openAccounts);
+  const go = useShell((state) => state.go);
 
   if (accounts.length === 0) return null;
 
@@ -288,7 +283,7 @@ export function AccountStrip() {
       ))}
       <button
         type="button"
-        onClick={openAccounts}
+        onClick={() => go("accounts")}
         className="ui rounded-control px-2 py-1 text-[12px] text-muted hover:bg-white/5 hover:text-body"
       >
         Manage
