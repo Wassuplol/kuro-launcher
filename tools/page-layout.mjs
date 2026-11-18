@@ -34,12 +34,34 @@ const LABELS = Object.fromEntries(
   [...router.matchAll(/^\s+([a-z]+):\s+"([^"]+)",$/gm)].map((match) => [match[1], match[2]]),
 );
 
+/**
+ * The main window's socket.
+ *
+ * With the strip open there are two page targets, and measuring the wrong one reads as
+ * "the page never settled". The window label is the only thing that tells them apart,
+ * so each candidate is asked for its own.
+ */
 async function pageSocket() {
   const response = await fetch(`${BASE}/json/list`);
   const targets = await response.json();
-  const page = targets.find((target) => target.type === "page");
-  if (!page) throw new Error("no page target; is the launcher running with the debug port?");
-  return page.webSocketDebuggerUrl;
+  const pages = targets.filter((target) => target.type === "page");
+  if (pages.length === 0) throw new Error("no page target; is the launcher running with the debug port?");
+
+  for (const page of pages) {
+    const session = await connect(page.webSocketDebuggerUrl);
+    try {
+      const result = await session.send("Runtime.evaluate", {
+        expression: "window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label ?? ''",
+        returnByValue: true,
+      });
+      if (result.result.value === "main") return page.webSocketDebuggerUrl;
+    } finally {
+      session.close();
+    }
+  }
+
+  // Older builds without the metadata object: one window, so the first page is it.
+  return pages[0].webSocketDebuggerUrl;
 }
 
 function connect(url) {

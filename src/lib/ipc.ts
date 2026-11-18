@@ -23,6 +23,7 @@ import type {
   LaunchReading,
   LaunchState,
   LaunchTile,
+  Ledger,
   MultiInstance,
   PlayLog,
   Played,
@@ -180,6 +181,8 @@ export const api = {
 
   /** Every client launch this machine still has a log for, newest first. */
   receiptsScan: () => call<Receipt[]>("receipts_scan"),
+  /** Playtime the log folder cannot hold any more, with its coverage stated. */
+  ledgerView: () => call<Ledger>("ledger_view"),
   /** Place ids to names, best effort, cached on disk after the first answer. */
   receiptNames: (places: number[]) =>
     call<Record<string, string>>("receipts_names", { places }),

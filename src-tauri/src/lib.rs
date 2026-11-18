@@ -6,6 +6,7 @@ pub mod gpu;
 pub mod http;
 pub mod identity;
 pub mod launch;
+pub mod ledger;
 pub mod library;
 pub mod profiles;
 pub mod receipts;
@@ -1480,7 +1481,19 @@ fn library_clear(state: State<'_, AppState>) -> Result<library::Log, LaunchError
 /// the facts and which do not exist in a log at all.
 #[tauri::command]
 fn receipts_scan(state: State<'_, AppState>) -> Result<Vec<receipts::Receipt>, LaunchError> {
-    receipts::scan(&state.data_root)
+    let list = receipts::scan(&state.data_root)?;
+    // Every read of the log folder also folds what it found into the ledger, because
+    // the logs are what rotate and the ledger is what survives that. A ledger that
+    // cannot be written must not cost the page its receipts: the card reports its own
+    // failure when it is asked for one.
+    let _ = ledger::absorb(&state.data_root, &list);
+    Ok(list)
+}
+
+/// The playtime ledger: totals the log folder cannot hold any more.
+#[tauri::command]
+fn ledger_view(state: State<'_, AppState>) -> Result<ledger::Ledger, LaunchError> {
+    ledger::view(&state.data_root)
 }
 
 /// Resolves place ids to names for the Sessions page, and remembers every answer.
@@ -2109,6 +2122,7 @@ pub fn run() {
             library_record,
             library_clear,
             receipts_scan,
+            ledger_view,
             receipts_names,
             receipts_open,
             friends_roster,

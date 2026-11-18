@@ -213,6 +213,35 @@ export type LaunchTile = {
   used: number;
 };
 
+export type LedgerTotals = {
+  seconds: number;
+  sessions: number;
+  /** Places played, not launches made. */
+  places: number;
+  days: number;
+};
+
+export type LedgerPlace = {
+  place: number;
+  name: string | null;
+  seconds: number;
+  sessions: number;
+};
+
+/** Totals that outlive the log folder, plus the card the Sessions page draws. */
+export type Ledger = {
+  all: LedgerTotals;
+  year: number;
+  thisYear: LedgerTotals;
+  /** The first and last session the ledger holds, unix seconds. */
+  first: number | null;
+  last: number | null;
+  top: LedgerPlace[];
+  yearTop: LedgerPlace[];
+  longest: { place: number | null; name: string | null; seconds: number; started: number } | null;
+  busiest: { date: string; seconds: number } | null;
+};
+
 export type StripState = {
   running: boolean;
   place: number | null;

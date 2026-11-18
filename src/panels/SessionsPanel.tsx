@@ -2,11 +2,12 @@ import { ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { EmptyState } from "../components/EmptyState";
+import { LedgerCard } from "../components/LedgerCard";
 import { Badge, Section } from "../components/Panel";
 import { cn } from "../lib/cn";
 import { bytes, span, stamp } from "../lib/format";
 import { api, CommandError, failureDetail } from "../lib/ipc";
-import type { GpuPin, Receipt } from "../lib/types";
+import type { GpuPin, Ledger, Receipt } from "../lib/types";
 
 /**
  * Sessions: what this machine actually ran.
@@ -53,6 +54,7 @@ function summarize(receipts: Receipt[]): Totals {
 
 export function SessionsBody() {
   const [receipts, setReceipts] = useState<Receipt[] | null>(null);
+  const [ledger, setLedger] = useState<Ledger | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
@@ -63,6 +65,10 @@ export function SessionsBody() {
     try {
       const list = await api.receiptsScan();
       setReceipts(list);
+
+      // The ledger is read after the scan, because the scan is what folds the folder
+      // into it. A ledger that will not load is a missing card, not a broken page.
+      setLedger(await api.ledgerView().catch(() => null));
 
       // A place id is honest and unreadable. The names come from a cache that only
       // asks Roblox once per place, and the page is already painted when it does.
@@ -124,6 +130,9 @@ export function SessionsBody() {
   if (receipts.length === 0) {
     return (
       <div className="mt-10">
+        {/* The folder is empty but the ledger is not: that is exactly the case the
+            ledger exists for, so it is drawn before the empty state. */}
+        {ledger ? <LedgerCard ledger={ledger} /> : null}
         <EmptyState
           title="No client logs yet"
           body="Roblox writes a log every time the client starts. Launch something from here and this page fills with what actually happened."
@@ -138,6 +147,7 @@ export function SessionsBody() {
       <Machine receipts={receipts} />
       <Preference />
       <Played receipts={receipts} />
+      {ledger ? <LedgerCard ledger={ledger} /> : null}
 
       <Section
         title="Launches on this machine"
