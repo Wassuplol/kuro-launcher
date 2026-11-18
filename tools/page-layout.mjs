@@ -101,10 +101,15 @@ const probe = `(() => {
       };
     });
 
+  // Sticky and fixed are always wrong inside a page: they are what a drawer
+  // leaves behind. Absolute is only wrong when the element is a block itself
+  // (a direct child of the column), because an icon placed inside a field is
+  // ordinary layout.
   const pinned = [...main.querySelectorAll("*")]
     .filter((el) => {
       const position = getComputedStyle(el).position;
-      return position === "sticky" || position === "absolute" || position === "fixed";
+      if (position === "sticky" || position === "fixed") return true;
+      return position === "absolute" && el.parentElement === column;
     })
     .map((el) => el.tagName.toLowerCase() + " " + String(el.className).slice(0, 48));
 

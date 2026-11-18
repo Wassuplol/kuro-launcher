@@ -40,6 +40,15 @@ export function LaunchBody() {
     void load();
     setDone(null);
     setLaunchProblem(null);
+
+    // A tile on Home or in Search hands its place here rather than spawning a
+    // client. The read below picks it up on the same pass, so the page arrives
+    // already knowing what it would run.
+    const pending = useShell.getState().pending;
+    if (pending) {
+      setTarget(pending);
+      useShell.getState().clearPending();
+    }
     // The field is the point of this page, so it takes focus. Unless something
     // else has opened in the meantime: being pulled out of the palette by a
     // timer is the kind of small theft that makes an app feel broken.

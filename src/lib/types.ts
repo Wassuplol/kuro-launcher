@@ -288,3 +288,41 @@ export type ImportedFlags = {
   values: Record<string, unknown>;
   refused: string[];
 };
+
+/** One game in a grid. `place` is what a launch needs; `universe` is the id. */
+export type GameCard = {
+  universe: number;
+  place: number;
+  name: string;
+  players: number;
+  creator: string;
+  icon: string | null;
+};
+
+export type FeedSection = {
+  topic: string;
+  treatment: string;
+  games: GameCard[];
+};
+
+export type DiscoveryFeed = {
+  sections: FeedSection[];
+  fetched: number;
+  /** True when this is a cached answer, which the page says rather than hiding. */
+  cached: boolean;
+};
+
+export type Person = {
+  user: number;
+  name: string;
+  display: string;
+  verified: boolean;
+  headshot: string | null;
+};
+
+export type DiscoverySearch = {
+  games: GameCard[];
+  people: Person[];
+  fetched: number;
+  cached: boolean;
+};

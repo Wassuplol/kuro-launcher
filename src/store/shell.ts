@@ -16,12 +16,16 @@ type ShellState = {
   settings: Settings | null;
   bootFailed: boolean;
   page: Page;
+  /** A place a grid sent to the Launch page, consumed there once. */
+  pending: string | null;
   paletteOpen: boolean;
   settingsOpen: boolean;
   onboardingOpen: boolean;
 
   boot: () => Promise<void>;
   go: (page: Page) => void;
+  prefill: (target: string) => void;
+  clearPending: () => void;
   openPalette: () => void;
   closePalette: () => void;
   openSettings: () => void;
@@ -40,6 +44,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   settings: null,
   bootFailed: false,
   page: pageFromHash(window.location.hash),
+  pending: null,
   paletteOpen: false,
   settingsOpen: false,
   onboardingOpen: false,
@@ -69,6 +74,13 @@ export const useShell = create<ShellState>()((set, get) => ({
     reflect(page);
     set({ page, paletteOpen: false, settingsOpen: false });
   },
+
+  prefill: (target) => {
+    reflect("launch");
+    set({ pending: target, page: "launch", paletteOpen: false, settingsOpen: false });
+  },
+
+  clearPending: () => set({ pending: null }),
 
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),

@@ -1,3 +1,4 @@
+pub mod discovery;
 pub mod error;
 pub mod flags;
 pub mod http;
@@ -34,6 +35,9 @@ pub struct AppState {
     /// can say what happened instead of leaving it invisible.
     pub recovered: Mutex<Option<String>>,
     pub supply: SupplyState,
+    /// The per-class request allowance and the answers kept between paints.
+    pub budget: std::sync::Arc<discovery::Budget>,
+    pub cache: std::sync::Arc<discovery::Cache>,
     /// Set once the page has taken control of the window. Until then the window
     /// stays hidden, so nothing full-size is ever painted before the opening.
     pub opened: Arc<AtomicBool>,
@@ -917,6 +921,71 @@ fn flags_revert(state: State<'_, AppState>) -> Result<Option<String>, LaunchErro
     flags::apply::revert(&state.data_root)
 }
 
+/// The home feed, hydrated into cards the grid can draw.
+///
+/// Needs the session, because Roblox builds this feed for a signed-in account.
+#[tauri::command]
+async fn discovery_home(state: State<'_, AppState>) -> Result<discovery::Feed, LaunchError> {
+    let root = state.data_root.clone();
+    let chosen = identity::load(&root).ok().and_then(|store| {
+        store
+            .default
+            .or_else(|| store.accounts.first().map(|a| a.user_id))
+    });
+
+    let cookie = match chosen {
+        Some(user) => identity::cookie_for(&root, user).ok(),
+        None => None,
+    };
+
+    let budget = state.budget.clone();
+    let cache = state.cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        discovery::home(&budget, &cache, cookie.as_deref())
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The home feed was not read: {e}")))?
+}
+
+/// Games or people for one query. One call per search, because the endpoint
+/// allows four a minute and the cache answers repeats for three.
+#[tauri::command]
+async fn discovery_search(
+    state: State<'_, AppState>,
+    term: String,
+    people: bool,
+) -> Result<discovery::Search, LaunchError> {
+    let root = state.data_root.clone();
+    let chosen = identity::load(&root).ok().and_then(|store| {
+        store
+            .default
+            .or_else(|| store.accounts.first().map(|a| a.user_id))
+    });
+    let cookie = match chosen {
+        Some(user) => identity::cookie_for(&root, user).ok(),
+        None => None,
+    };
+
+    let budget = state.budget.clone();
+    let cache = state.cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        discovery::search(&budget, &cache, cookie.as_deref(), &term, people)
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The search was not answered: {e}")))?
+}
+
+/// What is left of each allowance, so a screen can say why a button is waiting.
+#[tauri::command]
+fn discovery_budget(state: State<'_, AppState>) -> Vec<(String, usize, usize)> {
+    state.budget.head_room(&[
+        discovery::Class::Feed,
+        discovery::Class::Search,
+        discovery::Class::Games,
+        discovery::Class::Thumbs,
+    ])
+}
+
 #[tauri::command]
 fn flags_export(state: State<'_, AppState>, name: String) -> Result<String, LaunchError> {
     let store = flags::store::load(&state.data_root)?;
@@ -1276,6 +1345,8 @@ pub fn run() {
                 singleton: Mutex::new(singleton),
                 recovered: Mutex::new(recovered),
                 supply: SupplyState::default(),
+                budget: std::sync::Arc::new(discovery::Budget::default()),
+                cache: std::sync::Arc::new(discovery::Cache::default()),
                 opened,
             });
             Ok(())
@@ -1301,6 +1372,9 @@ pub fn run() {
             launch_start,
             launch_multi_instance,
             launch_state,
+            discovery_home,
+            discovery_search,
+            discovery_budget,
             flags_view,
             flags_refresh,
             flags_search,

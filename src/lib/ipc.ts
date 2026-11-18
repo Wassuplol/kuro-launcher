@@ -9,6 +9,8 @@ import type {
   FlagLease,
   FlagRow,
   FlagStore,
+  DiscoveryFeed,
+  DiscoverySearch,
   ImportedFlags,
   InstallMethod,
   Launched,
@@ -131,6 +133,11 @@ export const api = {
   launchMultiInstance: (enabled: boolean) =>
     call<MultiInstance>("launch_multi_instance", { enabled }),
   launchState: () => call<LaunchState>("launch_state"),
+
+  discoveryHome: () => call<DiscoveryFeed>("discovery_home"),
+  discoverySearch: (term: string, people: boolean) =>
+    call<DiscoverySearch>("discovery_search", { term, people }),
+  discoveryBudget: () => call<[string, number, number][]>("discovery_budget"),
 
   flagsView: () => call<FlagsView>("flags_view"),
   flagsRefresh: () => call<FlagCatalog>("flags_refresh"),

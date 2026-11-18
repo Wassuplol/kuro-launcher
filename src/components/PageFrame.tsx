@@ -11,11 +11,14 @@ export function PageFrame({
   title,
   subtitle,
   aside,
+  wide = false,
   children,
 }: {
   title: string;
   subtitle?: string;
   aside?: ReactNode;
+  /** A page of tiles wants the window's width; a page of forms does not. */
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -34,8 +37,11 @@ export function PageFrame({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-14">
-        <div className="max-w-[820px]">{children}</div>
+      {/* Anchor off: a feed that fills in after mount would otherwise drag the
+          viewport down as thumbnails arrive, which reads as the page scrolling
+          itself. */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-14 [overflow-anchor:none]">
+        <div className={wide ? "max-w-[1180px]" : "max-w-[820px]"}>{children}</div>
       </div>
     </div>
   );
