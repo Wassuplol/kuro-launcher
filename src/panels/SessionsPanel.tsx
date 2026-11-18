@@ -136,6 +136,7 @@ export function SessionsBody() {
     <>
       <Summary totals={totals} />
       <Machine receipts={receipts} />
+      <Played receipts={receipts} />
 
       <Section
         title="Launches on this machine"
@@ -210,6 +211,112 @@ function Machine({ receipts }: { receipts: Receipt[] }) {
           per-program Windows setting, not a Roblox flag.
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * What the logs add up to: the games with the most time in them, and the last seven
+ * days as bars. Both come from the receipts already in hand, so nothing here needs a
+ * request and nothing is claimed beyond the window the logs still cover.
+ */
+function Played({ receipts }: { receipts: Receipt[] }) {
+  const played = receipts.filter((receipt) => receipt.handshake && receipt.place);
+
+  const top = useMemo(() => {
+    const byPlace = new Map<number, { name: string; seconds: number; sessions: number }>();
+    for (const receipt of played) {
+      const place = receipt.place as number;
+      const entry = byPlace.get(place) ?? {
+        name: receipt.name ?? `Place ${place}`,
+        seconds: 0,
+        sessions: 0,
+      };
+      entry.seconds += receipt.seconds;
+      entry.sessions += 1;
+      byPlace.set(place, entry);
+    }
+    return Array.from(byPlace.values())
+      .sort((a, b) => b.seconds - a.seconds)
+      .slice(0, 3);
+  }, [receipts]);
+
+  const days = useMemo(() => {
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const buckets = Array.from({ length: 7 }, (_, index) => {
+      const start = new Date(midnight);
+      start.setDate(start.getDate() - (6 - index));
+      return { start, seconds: 0 };
+    });
+    for (const receipt of played) {
+      const at = new Date(receipt.started * 1000);
+      const slot = buckets.findIndex((bucket) => {
+        const next = new Date(bucket.start);
+        next.setDate(next.getDate() + 1);
+        return at >= bucket.start && at < next;
+      });
+      if (slot >= 0) {
+        const bucket = buckets[slot];
+        if (bucket) bucket.seconds += receipt.seconds;
+      }
+    }
+    return buckets;
+  }, [receipts]);
+
+  if (top.length === 0) return null;
+
+  const peak = Math.max(...days.map((day) => day.seconds), 1);
+  const today = new Date().toDateString();
+
+  return (
+    <div className="mt-3 rounded-card border border-white/8 bg-page/50">
+      <div className="grid grid-cols-[1fr_auto] gap-8 px-4 py-3">
+        <div className="min-w-0">
+          <div className="label">Most played</div>
+          <div className="mt-2 space-y-1.5">
+            {top.map((entry) => (
+              <div key={entry.name} className="flex items-baseline gap-3 text-[11.5px]">
+                <span className="truncate text-body">{entry.name}</span>
+                <span className="num ml-auto shrink-0 text-[11px] text-muted">
+                  {entry.sessions} session{entry.sessions === 1 ? "" : "s"}
+                </span>
+                <span className="num w-[52px] shrink-0 text-right text-body">{span(entry.seconds)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="shrink-0 border-l border-white/8 pl-7">
+          <div className="label text-right">Last 7 days</div>
+          {/* The baseline is drawn for every day, so a quiet week reads as a quiet
+              week rather than as a chart that failed to render. */}
+          <div className="mt-2 flex items-end gap-2 border-b border-white/10 pb-1">
+            {days.map((day) => {
+              const height = day.seconds > 0 ? Math.max(5, Math.round((day.seconds / peak) * 30)) : 3;
+              const isToday = day.start.toDateString() === today;
+              return (
+                <span
+                  key={day.start.toISOString()}
+                  title={`${day.start.toLocaleDateString(undefined, { weekday: "long" })}: ${span(day.seconds)}`}
+                  className={cn("w-[13px] rounded-[2px]", isToday ? "bg-white/55" : day.seconds > 0 ? "bg-white/28" : "bg-white/12")}
+                  style={{ height }}
+                />
+              );
+            })}
+          </div>
+          <div className="mt-1 flex gap-2">
+            {days.map((day) => (
+              <span
+                key={day.start.toISOString()}
+                className="num w-[13px] text-center text-[8.5px] leading-none text-muted"
+              >
+                {day.start.toLocaleDateString(undefined, { weekday: "short" })}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
