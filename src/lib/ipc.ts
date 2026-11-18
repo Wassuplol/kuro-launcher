@@ -16,6 +16,7 @@ import type {
   DiscoverySearch,
   GameDetail,
   GameServers,
+  GpuPin,
   ImportedFlags,
   InstallMethod,
   Launched,
@@ -143,6 +144,11 @@ export const api = {
   launchMultiInstance: (enabled: boolean) =>
     call<MultiInstance>("launch_multi_instance", { enabled }),
   launchState: () => call<LaunchState>("launch_state"),
+
+  /** What Windows says about the graphics preference for the build about to run. */
+  gpuView: () => call<GpuPin>("gpu_view"),
+  /** Writes the entry now, and remembers whether launches re-apply it. */
+  gpuPin: (on: boolean) => call<GpuPin>("gpu_pin", { on }),
 
   discoveryHome: () => call<DiscoveryFeed>("discovery_home"),
   discoverySearch: (term: string, people: boolean) =>

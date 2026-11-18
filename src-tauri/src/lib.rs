@@ -2,6 +2,7 @@ pub mod assistant;
 pub mod discovery;
 pub mod error;
 pub mod flags;
+pub mod gpu;
 pub mod http;
 pub mod identity;
 pub mod launch;
@@ -494,11 +495,12 @@ async fn launch_start(
     user_id: Option<u64>,
 ) -> Result<launch::Launched, LaunchError> {
     let root = state.data_root.clone();
-    let (pinned, multi) = {
+    let (pinned, multi, gpu_pin) = {
         let settings = state.settings.lock().map_err(|_| poisoned())?;
         (
             settings.supply.pinned.clone(),
             settings.launch.multi_instance,
+            settings.launch.gpu_pin,
         )
     };
 
@@ -579,6 +581,7 @@ async fn launch_start(
                 detail: "That launch is already starting, so no second client was opened."
                     .to_string(),
                 flags: None,
+                gpu: None,
             });
         }
 
@@ -587,6 +590,23 @@ async fn launch_start(
         // ahead: a game with vanilla flags beats no game.
         let (leashed, flag_note) =
             apply_flags_for(&root, &installed, &pinned, chosen, prepared.place);
+
+        // Windows reads this per executable path, and a new version folder is a new
+        // path, so it is re-applied on the way into every launch rather than once.
+        // A failure is reported and the launch goes ahead: a game on the wrong card
+        // beats no game.
+        let gpu_note = if gpu_pin {
+            match gpu::ensure(
+                std::path::Path::new(&prepared.path),
+                gpu::Choice::HighPerformance,
+            ) {
+                Ok(true) => Some("Pinned this build to the high-performance card.".to_string()),
+                Ok(false) => None,
+                Err(error) => Some(error.message),
+            }
+        } else {
+            None
+        };
 
         let outcome = (|| {
             let ticket = launch::ticket::mint(&cookie)?;
@@ -629,6 +649,7 @@ async fn launch_start(
                     reused: false,
                     detail,
                     flags: flag_note,
+                    gpu: gpu_note,
                 })
             }
             Err(error) => {
@@ -715,6 +736,105 @@ fn launch_state(state: State<'_, AppState>) -> Result<LaunchState, LaunchError> 
         player_running: launch::spawn::player_running(),
         multi_instance,
     })
+}
+
+// ---- the graphics preference ----
+
+/// What Windows currently says about the build a launch would run.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuPin {
+    /// The folder of the client a launch would start, if any.
+    pub folder: Option<String>,
+    pub exe: Option<String>,
+    /// Windows' own name for the entry, or `None` when there is no entry at all.
+    pub current: Option<String>,
+    /// Whether the launch path re-applies the high-performance preference.
+    pub pinned: bool,
+}
+
+fn gpu_probe(pinned: &Option<String>, on: bool) -> Result<GpuPin, LaunchError> {
+    let installed = supply::discover_all(pinned, None)?;
+    let Some(client) = launch::client_for(&installed, pinned) else {
+        return Ok(GpuPin {
+            folder: None,
+            exe: None,
+            current: None,
+            pinned: on,
+        });
+    };
+
+    let exe = PathBuf::from(&client.path).join(Kind::Player.executable());
+    Ok(GpuPin {
+        folder: Some(client.folder),
+        exe: Some(exe.to_string_lossy().to_string()),
+        current: gpu::read(&exe)?.map(|choice| choice.label().to_string()),
+        pinned: on,
+    })
+}
+
+#[tauri::command]
+async fn gpu_view(state: State<'_, AppState>) -> Result<GpuPin, LaunchError> {
+    let (pinned, on) = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        (settings.supply.pinned.clone(), settings.launch.gpu_pin)
+    };
+
+    tauri::async_runtime::spawn_blocking(move || gpu_probe(&pinned, on))
+        .await
+        .map_err(|e| worker_failed(format!("The graphics preference could not be read: {e}")))?
+}
+
+/// Writes or removes the entry for the build a launch would run, and remembers the
+/// switch so the next launch behaves the way the screen says it will.
+#[tauri::command]
+async fn gpu_pin(state: State<'_, AppState>, on: bool) -> Result<GpuPin, LaunchError> {
+    let pinned = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.supply.pinned.clone()
+    };
+
+    let written = tauri::async_runtime::spawn_blocking(move || {
+        let installed = supply::discover_all(&pinned, None)?;
+        let client = launch::client_for(&installed, &pinned).ok_or_else(|| {
+            LaunchError::new(
+                FailureCode::ClientMissing,
+                "No Roblox client is installed on this machine yet.",
+            )
+            .with_action("Open Roblox versions")
+        })?;
+
+        let exe = PathBuf::from(&client.path).join(Kind::Player.executable());
+        let choice = if on {
+            gpu::Choice::HighPerformance
+        } else {
+            gpu::Choice::Decide
+        };
+        gpu::write(&exe, choice)?;
+
+        Ok(GpuPin {
+            folder: Some(client.folder),
+            exe: Some(exe.to_string_lossy().to_string()),
+            current: gpu::read(&exe)?.map(|choice| choice.label().to_string()),
+            pinned: on,
+        })
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The graphics preference was not written: {e}")))?;
+
+    let pin = written?;
+
+    // Only after the write landed: a switch that claims a preference the registry
+    // does not carry would be a lie the next launch keeps telling.
+    let next = {
+        let mut settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.launch.gpu_pin = on;
+        settings::normalise(settings.clone())
+    };
+    settings::save(&state.data_root, &next)?;
+    *state.settings.lock().map_err(|_| poisoned())? = next;
+
+    Ok(pin)
 }
 
 // ---- stage 05, flags ----
@@ -1681,6 +1801,8 @@ pub fn run() {
             launch_start,
             launch_multi_instance,
             launch_state,
+            gpu_view,
+            gpu_pin,
             discovery_home,
             discovery_search,
             discovery_game,

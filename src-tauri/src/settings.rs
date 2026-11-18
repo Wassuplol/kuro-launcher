@@ -45,13 +45,27 @@ pub struct Supply {
 
 /// What the launch pipeline remembers. Nothing here is inferred: both switches
 /// change what happens on the machine, so both are asked for.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Launching {
     /// Hold `ROBLOX_singletonMutex` for the life of the app, so a second client
     /// can start beside the first. Off by default: it changes how the machine
     /// behaves for every Roblox program, not only this one.
     pub multi_instance: bool,
+    /// Write the high-performance graphics preference for the executable about to
+    /// run. On by default: Windows decides per program, and the WRONG card is the
+    /// usual reason a laptop runs a game at a fraction of its speed. The entry names
+    /// one exact path, so it is re-applied every launch rather than once.
+    pub gpu_pin: bool,
+}
+
+impl Default for Launching {
+    fn default() -> Self {
+        Self {
+            multi_instance: false,
+            gpu_pin: true,
+        }
+    }
 }
 
 /// The assistant's connection. The key is stored **sealed** with DPAPI, the same

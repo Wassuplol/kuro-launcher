@@ -64,6 +64,8 @@ pub struct Launched {
     /// What happened to the flag file: written, or why it was left alone. A
     /// flag failure never stops a launch, so it is reported here instead.
     pub flags: Option<String>,
+    /// What happened to the graphics preference, when it changed on this launch.
+    pub gpu: Option<String>,
 }
 
 /// What the drawer shows for a pasted destination before anything is started.
@@ -103,6 +105,16 @@ fn choose(installed: &[InstalledClient], pinned: &Option<String>) -> Option<Inst
         .or_else(|| installed.iter().filter(real).find(|c| c.live))
         .or_else(|| installed.iter().find(real))
         .cloned()
+}
+
+/// The client a launch would run right now. Exposed because other screens talk
+/// about "the build about to start" and must mean the same thing the launch path
+/// means, rather than picking a folder of their own.
+pub fn client_for(
+    installed: &[InstalledClient],
+    pinned: &Option<String>,
+) -> Option<InstalledClient> {
+    choose(installed, pinned)
 }
 
 pub fn prepare(

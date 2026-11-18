@@ -16,7 +16,7 @@ export type Settings = {
   identity: Identity;
   intro: { instantStart: boolean };
   supply: { pinned: string | null };
-  launch: { multiInstance: boolean };
+  launch: { multiInstance: boolean; gpuPin: boolean };
   advanced: boolean;
 };
 
@@ -189,6 +189,10 @@ export type Launched = {
   /** True when the same request was answered moments ago and nothing spawned. */
   reused: boolean;
   detail: string;
+  /** What happened to the flag file on this launch, when it changed. */
+  flags?: string | null;
+  /** What happened to the graphics preference on this launch, when it changed. */
+  gpu?: string | null;
 };
 
 export type LaunchState = {
@@ -201,6 +205,20 @@ export type MultiInstance = {
   settings: Settings;
   /** False when another program already held the lock, so it applies next start. */
   created: boolean;
+};
+
+/**
+ * The per-program graphics preference Windows keeps for this build.
+ *
+ * `current` is Windows' own name for the entry, `pinned` is whether the launch path
+ * re-applies it. They can disagree for one launch: a new version folder arrives with
+ * no entry, and the switch writes it on the way in.
+ */
+export type GpuPin = {
+  folder: string | null;
+  exe: string | null;
+  current: string | null;
+  pinned: boolean;
 };
 
 /** A flag's value is whatever its name promises: bool, int, number or text. */

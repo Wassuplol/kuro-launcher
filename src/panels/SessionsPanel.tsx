@@ -6,7 +6,7 @@ import { Badge, Section } from "../components/Panel";
 import { cn } from "../lib/cn";
 import { bytes, span, stamp } from "../lib/format";
 import { api, CommandError, failureDetail } from "../lib/ipc";
-import type { Receipt } from "../lib/types";
+import type { GpuPin, Receipt } from "../lib/types";
 
 /**
  * Sessions: what this machine actually ran.
@@ -136,6 +136,7 @@ export function SessionsBody() {
     <>
       <Summary totals={totals} />
       <Machine receipts={receipts} />
+      <Preference />
       <Played receipts={receipts} />
 
       <Section
@@ -174,6 +175,83 @@ export function SessionsBody() {
         keeps the recent ones and deletes the rest, so an empty week is the folder, not the app.
       </p>
     </>
+  );
+}
+
+/**
+ * The graphics preference Windows keeps per program, and the reason it is written
+ * more than once.
+ *
+ * The entry names one executable path, so a Roblox update that installs a new
+ * `version-…` folder is a new program to Windows, and the old entry keeps naming a
+ * file nothing runs. That is why the switch lives here and in the launch path.
+ *
+ * Three states, and each one is a different sentence: off, on but not yet written for
+ * this build, and on and already written.
+ */
+function Preference() {
+  const [pin, setPin] = useState<GpuPin | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .gpuView()
+      .then((view) => {
+        if (live) setPin(view);
+      })
+      .catch(() => {
+        if (live) setProblem("The graphics preference could not be read.");
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // No client on the machine is a versions-page problem, not a preference one.
+  if (!pin || !pin.exe) return null;
+
+  const holds = pin.current === "High performance";
+  const on = !pin.pinned ? true : !holds;
+  const action = !pin.pinned ? "Pin to the fast card" : holds ? "Let Windows decide" : "Write it now";
+
+  const commit = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      setPin(await api.gpuPin(on));
+    } catch (error) {
+      setProblem(error instanceof CommandError ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-1.5">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-muted">
+        <span className="label">Preference</span>
+        <span className="text-body">{pin.current ?? "no entry"}</span>
+        <button
+          type="button"
+          onClick={() => void commit()}
+          disabled={busy}
+          className={cn(
+            "ui h-6 rounded-control border border-white/10 px-2 text-[11px] hover:text-body disabled:opacity-50",
+            holds ? "text-muted" : "text-gold hover:border-gold/40",
+          )}
+        >
+          {busy ? "Writing" : action}
+        </button>
+        <span>
+          {pin.pinned
+            ? "Written for the build about to run, because a new version folder is a new program."
+            : "Off. Launches leave Windows' choice alone."}
+        </span>
+      </p>
+      {problem ? <p className="mt-1 text-[11.5px] text-danger">{problem}</p> : null}
+    </div>
   );
 }
 
