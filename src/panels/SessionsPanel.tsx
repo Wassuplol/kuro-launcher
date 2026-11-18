@@ -540,7 +540,7 @@ function Details({ receipt }: { receipt: Receipt }) {
   // Roblox's own games/start URL.
   const copyInvite = async () => {
     if (receipt.place == null) return;
-    if (await copyText(inviteLink(receipt.place, receipt.job))) {
+    if (await copyText(inviteLink(receipt.place, receipt.job, receipt.name))) {
       setInvited(true);
       window.setTimeout(() => setInvited(false), 2000);
     }

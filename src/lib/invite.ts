@@ -20,11 +20,18 @@ export function robloxJoin(place: number, server?: string | null): string {
   return server ? `${base}&gameInstanceId=${encodeURIComponent(server)}` : base;
 }
 
-/** The short link: a card, then the same destination. */
-export function inviteLink(place: number, server?: string | null): string {
+/**
+ * The short link: a card, then the same destination.
+ *
+ * The name rides along because the page cannot read it: Roblox's public APIs do not
+ * allow another site to fetch a game's details, so the person who sent the link is the
+ * only source of a name that is not a guess.
+ */
+export function inviteLink(place: number, server?: string | null, name?: string | null): string {
   const url = new URL(INVITE_BASE);
   url.searchParams.set("p", String(place));
   if (server) url.searchParams.set("s", server);
+  if (name) url.searchParams.set("n", name.slice(0, 80));
   return url.toString();
 }
 
