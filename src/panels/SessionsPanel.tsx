@@ -158,7 +158,11 @@ export function SessionsBody() {
       >
         {shown.length === 0 ? (
           <p className="px-3.5 py-4 text-[12px] text-muted">
-            Nothing in this filter. Every launch here reached a server.
+            {filter === "missed"
+              ? "Every launch here reached a server."
+              : filter === "reached"
+                ? "No launch here reached a server."
+                : "Nothing to show."}
           </p>
         ) : (
           shown.map((receipt) => <ReceiptRow key={receipt.id} receipt={receipt} />)
