@@ -33,6 +33,7 @@ KURO server, no account to create, and nothing to sign up for.
 | **Game page** | Description, visits, rating, max players, and the public server list on a tab |
 | **Library** | The games the account has starred, paged and filterable, and this machine's own record of what it launched |
 | **Friends** | The account's friends with live presence, and a Join that lands in the exact server a friend is in |
+| **Assistant** | A pane docked beside the page, streamed as it writes. It reads the current screen, the saved accounts and what is running, proposes one action at a time, and never starts anything itself |
 | **Accounts** | Quick Login (six-character code or QR), cookie import, DPAPI vault, session health, forget, default |
 | **Launch** | A place id, a game link, a private invite, a friend, or one exact server. One client at a time, idempotent |
 | **Versions** | Discover across both install roots, direct install with hash and signature checks, pin, prune, verify, repair |
@@ -51,10 +52,14 @@ KURO server, no account to create, and nothing to sign up for.
   <img src="assets/friends.webp" alt="The Friends page: live presence, and a Join that lands in the server a friend is in" width="100%">
 </p>
 
+<p align="center">
+  <img src="assets/assistant.webp" alt="The assistant docked beside the page, with the one action it proposed as a button" width="100%">
+</p>
+
 ## What is not built
 
-Still missing: the assistant and a release pipeline. The table above has no entry for
-them because they do not exist yet, not because they are hiding.
+Still missing: a release pipeline. The table above has no entry for it because it does
+not exist yet, not because it is hiding.
 
 ## Three things this app had to measure, not assume
 
@@ -78,6 +83,12 @@ four calls a minute, the public server list three, game details sixty, thumbnail
 fifteen hundred. The budget is keyed per endpoint class rather than per host, which
 is why the search box submits instead of typing, and why the server list is behind
 a tab.
+
+**A streamed answer is a socket, not a JSON body.** The assistant posts with
+`stream: true`, reads `text/event-stream` line by line and forwards each delta as an
+event while the command is still running, so the pane paints as the model writes. A
+stop flag is checked between deltas, because a Stop that only stops listening leaves
+the model talking to nobody.
 
 **Presence is priced twice.** A friend list is twenty calls a minute, the tightest
 budget in the app, and it comes back as ids with empty names, so it is two more calls
@@ -103,6 +114,7 @@ src-tauri/src/
   flags/       the catalogue, profiles, scopes, the allowlist, the lease
   library.rs   this machine's own record of what it launched
   social.rs    the friend list, names, faces and live presence
+  assistant.rs the forwarded conversation: resolved config, SSE streaming, the prompt
   error.rs     every failure has a code, a cause and an action
 src/
   screens/     Home, Search, Game, Launch, Accounts, Flags, Versions, Library, Friends

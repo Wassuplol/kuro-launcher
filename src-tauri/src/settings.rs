@@ -54,6 +54,20 @@ pub struct Launching {
     pub multi_instance: bool,
 }
 
+/// The assistant's connection. The key is stored **sealed** with DPAPI, the same
+/// way a session cookie is, and is never returned to the page: the screen only ever
+/// learns whether one is set.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Assistant {
+    /// Empty means "use the environment, then the default endpoint".
+    pub base_url: String,
+    /// Empty means "use the default model", which is named in `assistant.rs`.
+    pub model: String,
+    /// Hex DPAPI blob. Never plaintext, and never read back by the page.
+    pub key_sealed: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -62,6 +76,7 @@ pub struct Settings {
     pub intro: Intro,
     pub supply: Supply,
     pub launch: Launching,
+    pub assistant: Assistant,
     pub advanced: bool,
 }
 
@@ -73,6 +88,7 @@ impl Default for Settings {
             intro: Intro::default(),
             supply: Supply::default(),
             launch: Launching::default(),
+            assistant: Assistant::default(),
             advanced: false,
         }
     }
@@ -161,6 +177,22 @@ pub fn save(root: &Path, next: &Settings) -> Result<(), LaunchError> {
 }
 
 /// Trims and caps the display name exactly as the onboarding field promises.
+/// What the page is allowed to read: everything except the sealed assistant key.
+///
+/// The seal is ciphertext, but it is still nobody's business outside this process,
+/// and keeping it out of the payload is what makes "write-only" a fact instead of a
+/// description.
+pub fn for_page(mut settings: Settings) -> Settings {
+    settings.assistant.key_sealed.clear();
+    settings
+}
+
+/// Puts the stored seal back after the page sends settings it never saw the seal in.
+/// Without this, every save from the settings drawer would delete the key.
+pub fn keep_seal(next: &mut Settings, stored: &str) {
+    next.assistant.key_sealed = stored.to_string();
+}
+
 pub fn normalise(mut next: Settings) -> Settings {
     next.schema = SCHEMA;
     next.identity.name = next
@@ -172,4 +204,27 @@ pub fn normalise(mut next: Settings) -> Settings {
         .collect::<String>();
     next.identity.genres.truncate(12);
     next
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_page_never_receives_the_sealed_key_but_the_file_keeps_it() {
+        let mut stored = Settings::default();
+        stored.assistant.key_sealed = "abcd1234".to_string();
+
+        let seen = for_page(stored.clone());
+        assert!(
+            seen.assistant.key_sealed.is_empty(),
+            "the page must not read the seal"
+        );
+
+        // What the page sends back is the same object with an empty seal, and the
+        // save path has to put the stored one back.
+        let mut incoming = seen;
+        keep_seal(&mut incoming, &stored.assistant.key_sealed);
+        assert_eq!(incoming.assistant.key_sealed, "abcd1234");
+    }
 }

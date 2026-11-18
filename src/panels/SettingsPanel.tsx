@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { PanelFrame, Row, Section } from "../components/Panel";
+import { AssistantSection } from "./AssistantSection";
 import { Toggle } from "../components/Toggle";
 import { cn } from "../lib/cn";
 import type { Intent } from "../lib/types";
@@ -279,6 +280,8 @@ export function SettingsPanel() {
               </>
             ) : null}
           </Section>
+
+          <AssistantSection />
 
           <Section title="About">
             <Row label={info?.name ?? "Mem's Kuro Launcher"} hint="Unofficial third-party launcher.">

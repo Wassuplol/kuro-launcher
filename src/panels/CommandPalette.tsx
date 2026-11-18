@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Command } from "cmdk";
-import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, Home, Library, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, Home, Library, MessagesSquare, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 
 import { PAGE_LABEL, PAGES } from "../app/router";
@@ -41,6 +41,7 @@ export function CommandPalette() {
   const close = useShell((state) => state.closePalette);
   const go = useShell((state) => state.go);
   const openSettings = useShell((state) => state.openSettings);
+  const toggleAssistant = useShell((state) => state.toggleAssistant);
   const openOnboarding = useShell((state) => state.openOnboarding);
   const openDataRoot = useShell((state) => state.openDataRoot);
   const settings = useShell((state) => state.settings);
@@ -95,6 +96,18 @@ export function CommandPalette() {
             </Command.Group>
 
             <Command.Group heading="App">
+              <Command.Item
+                value="assistant ask question close"
+                onSelect={() => {
+                  close();
+                  toggleAssistant();
+                }}
+              >
+                <MessagesSquare size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
+                <span>Open the assistant</span>
+                <span className="num ml-auto text-[11px] text-muted">Ctrl 9</span>
+              </Command.Item>
+
               <Command.Item
                 value="open settings"
                 onSelect={() => {

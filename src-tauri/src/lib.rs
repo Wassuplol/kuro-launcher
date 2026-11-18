@@ -1,3 +1,4 @@
+pub mod assistant;
 pub mod discovery;
 pub mod error;
 pub mod flags;
@@ -43,6 +44,9 @@ pub struct AppState {
     /// Set once the page has taken control of the window. Until then the window
     /// stays hidden, so nothing full-size is ever painted before the opening.
     pub opened: Arc<AtomicBool>,
+    /// Set by Stop while an answer is streaming. One flag for the whole app is
+    /// right here: there is one assistant pane, so there is one answer in flight.
+    pub cancel: Arc<AtomicBool>,
 }
 
 #[derive(Serialize)]
@@ -81,16 +85,25 @@ fn app_info(app: tauri::AppHandle, state: State<'_, AppState>) -> AppInfo {
 #[tauri::command]
 fn settings_load(state: State<'_, AppState>) -> Result<Settings, LaunchError> {
     let guard = state.settings.lock().map_err(|_| poisoned())?;
-    Ok(guard.clone())
+    // The sealed assistant key stays in this process: the page can set one and can
+    // learn whether one exists, and the ciphertext is not part of what it reads.
+    Ok(settings::for_page(guard.clone()))
 }
 
 #[tauri::command]
 fn settings_save(state: State<'_, AppState>, next: Settings) -> Result<Settings, LaunchError> {
-    let next = settings::normalise(next);
+    // The page never reads the sealed assistant key, so it cannot send it back. Keep
+    // whatever is stored, or every settings save would delete it.
+    let stored = {
+        let guard = state.settings.lock().map_err(|_| poisoned())?;
+        guard.assistant.key_sealed.clone()
+    };
+    let mut next = settings::normalise(next);
+    settings::keep_seal(&mut next, &stored);
     settings::save(&state.data_root, &next)?;
     let mut guard = state.settings.lock().map_err(|_| poisoned())?;
     *guard = next.clone();
-    Ok(next)
+    Ok(settings::for_page(next))
 }
 
 /// Recovery for a settings file that cannot be read. Writes the defaults back
@@ -1083,6 +1096,126 @@ async fn friends_roster(state: State<'_, AppState>) -> Result<social::Roster, La
         .map_err(|e| worker_failed(format!("The friend list was not read: {e}")))?
 }
 
+// ---- the assistant ----
+
+/// What the page is allowed to know: the endpoint, the model, and whether a key is
+/// set. The key itself never crosses this boundary.
+#[tauri::command]
+fn assistant_config(state: State<'_, AppState>) -> Result<assistant::Connection, LaunchError> {
+    let saved = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.assistant.clone()
+    };
+    Ok(assistant::resolve(&saved).connection())
+}
+
+/// The models the endpoint serves, for the picker in Settings.
+#[tauri::command]
+async fn assistant_models(state: State<'_, AppState>) -> Result<Vec<String>, LaunchError> {
+    let saved = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.assistant.clone()
+    };
+    let resolved = assistant::resolve(&saved);
+    tauri::async_runtime::spawn_blocking(move || assistant::models(&resolved))
+        .await
+        .map_err(|e| worker_failed(format!("The model list was not read: {e}")))?
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AssistantInput {
+    base_url: String,
+    model: String,
+    /// `Some` replaces the stored key, `None` keeps it. Clearing is an empty string,
+    /// so "leave it alone" and "remove it" are different requests.
+    key: Option<String>,
+}
+
+#[tauri::command]
+fn assistant_save(
+    state: State<'_, AppState>,
+    input: AssistantInput,
+) -> Result<assistant::Connection, LaunchError> {
+    let mut next = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.clone()
+    };
+
+    next.assistant.base_url = input.base_url.trim().to_string();
+    next.assistant.model = input.model.trim().to_string();
+
+    if let Some(key) = input.key {
+        let key = key.trim();
+        if key.is_empty() {
+            next.assistant.key_sealed.clear();
+        } else {
+            // Sealed with the same DPAPI vault as a session cookie, so the file on
+            // disk holds no usable credential.
+            let sealed = identity::vault::seal(key)?;
+            next.assistant.key_sealed = identity::hex(&sealed);
+        }
+    }
+
+    let next = settings::normalise(next);
+    settings::save(&state.data_root, &next)?;
+    {
+        let mut guard = state.settings.lock().map_err(|_| poisoned())?;
+        *guard = next.clone();
+    }
+    Ok(assistant::resolve(&next.assistant).connection())
+}
+
+/// One answer, streamed. Deltas arrive on `assistant:delta` while this is in
+/// flight; the return value is only the tail of it, a duration and a size.
+#[tauri::command]
+async fn assistant_send(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: assistant::SendRequest,
+) -> Result<assistant::Finished, LaunchError> {
+    let saved = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.assistant.clone()
+    };
+    let resolved = assistant::resolve(&saved);
+    let system = assistant::system_prompt(&request.context);
+
+    state
+        .cancel
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    let cancel = state.cancel.clone();
+    let started = std::time::Instant::now();
+    let turns = request.turns;
+
+    let chars = tauri::async_runtime::spawn_blocking(move || {
+        let emitter = app.clone();
+        assistant::stream(&resolved, &system, &turns, cancel, |text| {
+            let _ = emitter.emit(
+                assistant::DELTA,
+                assistant::StreamedDelta {
+                    text: text.to_string(),
+                },
+            );
+        })
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The assistant stopped answering: {e}")))??;
+
+    Ok(assistant::Finished {
+        ms: assistant::elapsed(started),
+        chars,
+    })
+}
+
+/// Stop reading the current answer. The socket closes at the next delta boundary.
+#[tauri::command]
+fn assistant_stop(state: State<'_, AppState>) {
+    state
+        .cancel
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
 /// What is left of each allowance, so a screen can say why a button is waiting.
 #[tauri::command]
 fn discovery_budget(state: State<'_, AppState>) -> Vec<(String, usize, usize)> {
@@ -1460,6 +1593,7 @@ pub fn run() {
                 budget: std::sync::Arc::new(discovery::Budget::default()),
                 cache: std::sync::Arc::new(discovery::Cache::default()),
                 opened,
+                cancel: std::sync::Arc::new(AtomicBool::new(false)),
             });
             Ok(())
         })
@@ -1494,6 +1628,11 @@ pub fn run() {
             library_record,
             library_clear,
             friends_roster,
+            assistant_config,
+            assistant_models,
+            assistant_save,
+            assistant_send,
+            assistant_stop,
             flags_view,
             flags_refresh,
             flags_search,

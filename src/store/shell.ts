@@ -23,6 +23,8 @@ type ShellState = {
   paletteOpen: boolean;
   settingsOpen: boolean;
   onboardingOpen: boolean;
+  /** The assistant dock is a column beside the page, not an overlay. */
+  assistantOpen: boolean;
 
   boot: () => Promise<void>;
   go: (page: Page) => void;
@@ -32,6 +34,7 @@ type ShellState = {
   openPalette: () => void;
   closePalette: () => void;
   openSettings: () => void;
+  toggleAssistant: (open?: boolean) => void;
   closeSettings: () => void;
   openOnboarding: () => void;
   closeOnboarding: () => void;
@@ -52,6 +55,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   paletteOpen: false,
   settingsOpen: false,
   onboardingOpen: false,
+  assistantOpen: false,
 
   boot: async () => {
     try {
@@ -94,6 +98,8 @@ export const useShell = create<ShellState>()((set, get) => ({
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
   openSettings: () => set({ settingsOpen: true }),
+  toggleAssistant: (open) =>
+    set((state) => ({ assistantOpen: open === undefined ? !state.assistantOpen : open })),
   closeSettings: () => set({ settingsOpen: false }),
   openOnboarding: () => set({ onboardingOpen: true, settingsOpen: false, paletteOpen: false }),
   closeOnboarding: () => set({ onboardingOpen: false }),

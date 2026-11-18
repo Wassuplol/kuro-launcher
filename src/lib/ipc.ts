@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AccountView,
+  AssistantConnection,
+  AssistantFinished,
+  AssistantTurn,
   AppInfo,
   ClientKind,
   FlagsView,
@@ -157,6 +160,17 @@ export const api = {
 
   /** The friend list with names, faces and live presence. Needs an account. */
   friendsRoster: () => call<Roster>("friends_roster"),
+
+  /** The endpoint, the model, and whether a key is set. Never the key. */
+  assistantConfig: () => call<AssistantConnection>("assistant_config"),
+  assistantModels: () => call<string[]>("assistant_models"),
+  /** `key: null` keeps the stored key; `""` clears it. */
+  assistantSave: (input: { baseUrl: string; model: string; key: string | null }) =>
+    call<AssistantConnection>("assistant_save", { input }),
+  /** Streams on the `assistant:delta` event; resolves when the answer ends. */
+  assistantSend: (turns: AssistantTurn[], context: string) =>
+    call<AssistantFinished>("assistant_send", { request: { turns, context } }),
+  assistantStop: () => call<void>("assistant_stop"),
 
   flagsView: () => call<FlagsView>("flags_view"),
   flagsRefresh: () => call<FlagCatalog>("flags_refresh"),

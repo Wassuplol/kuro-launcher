@@ -4,6 +4,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import {
   Home,
   Library,
+  MessagesSquare,
   PackageCheck,
   Play,
   Search,
@@ -15,6 +16,7 @@ import {
 import { motion } from "motion/react";
 import type { ComponentType } from "react";
 
+import { AssistantPanel } from "../components/AssistantPanel";
 import { RailItem } from "../components/RailItem";
 import { WindowControls } from "../components/WindowControls";
 import { cn } from "../lib/cn";
@@ -70,17 +72,53 @@ function TitleBar() {
   const page = useShell((state) => state.page);
   const openPalette = useShell((state) => state.openPalette);
 
+  // A frameless window has no frame to drag by, so dragging is asked for. The
+  // capability that allows `startDragging` was not in the list, which is why the
+  // window could not be moved at all: the call was refused and nothing said so.
+  //
+  // The three pixels of slack keep a double click a double click, because a click
+  // that never moves never starts a drag and the maximise still reaches the header.
+  const beginDrag = (event: React.MouseEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, input, textarea, a")) return;
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+
+    const cleanup = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", cleanup);
+    };
+
+    const move = (cursor: MouseEvent) => {
+      if (Math.abs(cursor.clientX - startX) < 3 && Math.abs(cursor.clientY - startY) < 3) {
+        return;
+      }
+      cleanup();
+      void (async () => {
+        // Explorer restores a maximised window when you drag it, and a window that
+        // will not move because it is maximised reads as broken.
+        if (await win.isMaximized()) await win.unmaximize();
+        await win.startDragging();
+      })();
+    };
+
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", cleanup);
+  };
+
   return (
     <header
-      data-tauri-drag-region
+      onMouseDown={beginDrag}
       onDoubleClick={() => void win.toggleMaximize()}
-      className="col-span-2 flex h-11 items-center gap-3 border-b border-white/8 bg-page pl-4 select-none"
+      className="col-span-full flex h-11 items-center gap-3 border-b border-white/8 bg-page pl-4 select-none"
     >
-      <span data-tauri-drag-region className="text-[13px] font-medium tracking-[0.14em] text-body">
+      <span className="text-[13px] font-medium tracking-[0.14em] text-body">
         KURO
       </span>
-      <span aria-hidden data-tauri-drag-region className="h-3 w-px bg-white/12" />
-      <span data-tauri-drag-region className="text-[12px] text-muted">
+      <span aria-hidden className="h-3 w-px bg-white/12" />
+      <span className="text-[12px] text-muted">
         {PAGE_LABEL[page]}
       </span>
 
@@ -104,6 +142,8 @@ function Rail() {
   const go = useShell((state) => state.go);
   const openSettings = useShell((state) => state.openSettings);
   const settingsOpen = useShell((state) => state.settingsOpen);
+  const assistantOpen = useShell((state) => state.assistantOpen);
+  const toggleAssistant = useShell((state) => state.toggleAssistant);
 
   return (
     <nav
@@ -135,7 +175,14 @@ function Rail() {
           />
         ))}
 
-        <div className="mt-auto shrink-0 pt-2">
+        <div className="mt-auto flex shrink-0 flex-col gap-1 pt-2">
+          <RailItem
+            label="Assistant"
+            shortcut="Ctrl 9"
+            icon={MessagesSquare}
+            active={assistantOpen}
+            onClick={() => toggleAssistant()}
+          />
           <RailItem
             label="Settings"
             icon={Settings}
@@ -168,6 +215,8 @@ function PageOutlet() {
 
 export function Shell() {
   const go = useShell((state) => state.go);
+  const assistantOpen = useShell((state) => state.assistantOpen);
+  const toggleAssistant = useShell((state) => state.toggleAssistant);
   const openPalette = useShell((state) => state.openPalette);
   const closePalette = useShell((state) => state.closePalette);
   const closeSettings = useShell((state) => state.closeSettings);
@@ -180,6 +229,7 @@ export function Shell() {
   useHotkeys("ctrl+6", () => go("accounts"), { preventDefault: true });
   useHotkeys("ctrl+7", () => go("flags"), { preventDefault: true });
   useHotkeys("ctrl+8", () => go("versions"), { preventDefault: true });
+  useHotkeys("ctrl+9", () => toggleAssistant(), { preventDefault: true, enableOnFormTags: true });
   // The hotkey library matches physical key codes, so the search key is
   // "slash", not "/". Layout independent, which is what a launcher wants.
   useHotkeys("slash", () => go("search"), { preventDefault: true });
@@ -208,8 +258,8 @@ export function Shell() {
   return (
     <div
       className={cn(
-        "grid h-full w-full grid-cols-[60px_1fr] grid-rows-[44px_1fr]",
-        "overflow-hidden bg-page",
+        "grid h-full w-full grid-rows-[44px_1fr] overflow-hidden bg-page",
+        assistantOpen ? "grid-cols-[60px_1fr_360px]" : "grid-cols-[60px_1fr]",
       )}
     >
       <TitleBar />
@@ -217,6 +267,7 @@ export function Shell() {
       <main className="relative min-w-0 overflow-hidden">
         <PageOutlet />
       </main>
+      {assistantOpen ? <AssistantPanel /> : null}
     </div>
   );
 }

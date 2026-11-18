@@ -415,3 +415,23 @@ export type GameServers = {
   fetched: number;
   cached: boolean;
 };
+
+/** The assistant's connection, as the screen is allowed to know it. */
+export type AssistantConnection = {
+  baseUrl: string;
+  model: string;
+  /** Whether a key is stored. The key itself never leaves Rust. */
+  keySet: boolean;
+  /** "saved", "environment", "hermes" or "none", so the screen can say where it came from. */
+  source: string;
+};
+
+export type AssistantTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type AssistantFinished = {
+  ms: number;
+  chars: number;
+};
