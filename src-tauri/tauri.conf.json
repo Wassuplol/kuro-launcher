@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mem's Kuro Launcher",
+  "productName": "Kuro Launcher",
   "mainBinaryName": "kuro-launcher",
   "version": "0.1.0",
   "identifier": "com.wassuplol.kuro",
