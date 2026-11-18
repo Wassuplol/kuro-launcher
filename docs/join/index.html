@@ -67,15 +67,6 @@
         align-items: center;
       }
 
-      .icon {
-        width: 64px;
-        height: 64px;
-        border-radius: 12px;
-        background: var(--raised);
-        flex: 0 0 auto;
-        object-fit: cover;
-      }
-
       .titles {
         min-width: 0;
       }
@@ -175,7 +166,6 @@
 
       <section class="card">
         <div class="head">
-          <img class="icon" id="icon" alt="" width="64" height="64" hidden />
           <div class="titles">
             <h1 id="name">Reading the invite</h1>
             <p class="by" id="by">One moment.</p>
@@ -200,8 +190,9 @@
       </section>
 
       <p class="note" id="note">
-        The button hands this server to the Roblox app. If it does not open, the second
-        link asks Roblox's website to start it instead.
+        <strong>Open in Roblox</strong> hands this server to the app. The second link asks
+        Roblox's website to start it instead, which is the fallback when the app does not
+        answer.
       </p>
     </main>
 
@@ -217,7 +208,6 @@
         var serverEl = document.getElementById("server");
         var openEl = document.getElementById("open");
         var webEl = document.getElementById("web");
-        var iconEl = document.getElementById("icon");
         var noteEl = document.getElementById("note");
 
         if (!place) {
@@ -225,19 +215,22 @@
           nameEl.className = "bad";
           byEl.textContent = "A link needs ?p=<place id>. Nothing was launched.";
           openEl.style.opacity = "0.4";
-          openEl.setAttribute("aria-disabled", "true");
           openEl.removeAttribute("href");
           webEl.removeAttribute("href");
           webEl.style.opacity = "0.4";
           return;
         }
 
+        nameEl.textContent = "Place " + place;
+        byEl.textContent = server
+          ? "One exact server, named in the link."
+          : "Any server of this place.";
+
         placeEl.textContent = place;
-        serverEl.textContent = server ? server : "Any server";
+        serverEl.textContent = server || "Any server";
+        if (server) serverEl.title = server;
 
-        var deep = "roblox://placeId=" + place;
-        if (server) deep += "&gameInstanceId=" + server;
-
+        var deep = "roblox://placeId=" + place + (server ? "&gameInstanceId=" + server : "");
         var web =
           "https://www.roblox.com/games/start?placeId=" +
           place +
@@ -246,52 +239,9 @@
         openEl.setAttribute("href", deep);
         webEl.setAttribute("href", web);
 
-        // The card is decoration on top of a working link: if Roblox's public APIs are
-        // unreachable, the buttons above already do the job and the page says so.
-        function fail() {
-          nameEl.textContent = "Place " + place;
-          byEl.textContent = "Roblox did not answer with the game's details.";
-          noteEl.innerHTML =
-            "The link still works: <strong>Open in Roblox</strong> hands this server to the app.";
-        }
-
-        fetch("https://apis.roblox.com/universes/v1/places/" + place + "/universe")
-          .then(function (r) {
-            if (!r.ok) throw new Error("universe");
-            return r.json();
-          })
-          .then(function (u) {
-            var universe = u.universeId;
-            if (!universe) throw new Error("universe");
-            return fetch("https://games.roblox.com/v1/games?universeIds=" + universe)
-              .then(function (r) {
-                return r.json();
-              })
-              .then(function (g) {
-                var game = (g.data || [])[0];
-                if (!game) throw new Error("game");
-                nameEl.textContent = game.name;
-                var creator = game.creator && game.creator.name ? game.creator.name : "";
-                byEl.textContent =
-                  creator + (game.playing != null ? " · " + game.playing + " playing now" : "");
-                return fetch(
-                  "https://thumbnails.roblox.com/v1/games/icons?universeIds=" +
-                    universe +
-                    "&size=256x256&format=Png&isCircular=false",
-                );
-              })
-              .then(function (r) {
-                return r.json();
-              })
-              .then(function (t) {
-                var icon = (t.data || [])[0];
-                if (icon && icon.imageUrl) {
-                  iconEl.src = icon.imageUrl;
-                  iconEl.hidden = false;
-                }
-              });
-          })
-          .catch(fail);
+        noteEl.innerHTML =
+          "Roblox shows the game's name and icon as soon as it opens. This page does not " +
+          "read them, because Roblox's public APIs do not allow another site to fetch them.";
       })();
     </script>
   </body>
