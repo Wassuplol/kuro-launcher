@@ -19,11 +19,14 @@ import type {
   LaunchReading,
   LaunchState,
   MultiInstance,
+  PlayLog,
+  Played,
   PrunePlan,
   PruneResult,
   QuickLoginAttempt,
   QuickLoginPoll,
   Settings,
+  Shelf,
   SupplySnapshot,
   VerifyReport,
 } from "./types";
@@ -142,6 +145,14 @@ export const api = {
   discoveryBudget: () => call<[string, number, number][]>("discovery_budget"),
   discoveryGame: (universe: number) => call<GameDetail>("discovery_game", { universe }),
   discoveryServers: (place: number) => call<GameServers>("discovery_servers", { place }),
+
+  /** One page of the account's favourites. Public data: no session needed. */
+  libraryFavorites: (userId: number, cursor: string | null) =>
+    call<Shelf>("library_favorites", { userId, cursor }),
+  /** What this machine launched, newest first. */
+  libraryRecent: () => call<PlayLog>("library_recent"),
+  libraryRecord: (entry: Omit<Played, "at">) => call<PlayLog>("library_record", { entry }),
+  libraryClear: () => call<PlayLog>("library_clear"),
 
   flagsView: () => call<FlagsView>("flags_view"),
   flagsRefresh: () => call<FlagCatalog>("flags_refresh"),

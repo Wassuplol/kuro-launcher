@@ -290,6 +290,32 @@ export type ImportedFlags = {
 };
 
 /** One game in a grid. `place` is what a launch needs; `universe` is the id. */
+/** One page of Roblox favourites, as the Library draws it. */
+export type Shelf = {
+  games: GameCard[];
+  /** The cursor for the next page, or null on the last one. */
+  next: string | null;
+  fetched: number;
+  cached: boolean;
+  /** Something inside the page failed to load; the tiles still stand. */
+  note?: string;
+};
+
+/** One launch this machine actually started. */
+export type Played = {
+  at: number;
+  place: number;
+  universe?: number | null;
+  name?: string | null;
+  mode: string;
+  account?: number | null;
+};
+
+export type PlayLog = {
+  schema: number;
+  entries: Played[];
+};
+
 export type GameCard = {
   universe: number;
   place: number;

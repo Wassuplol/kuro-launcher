@@ -56,6 +56,7 @@ pub enum Class {
     Games,
     Servers,
     Thumbs,
+    Library,
 }
 
 impl Class {
@@ -70,6 +71,8 @@ impl Class {
             // minute before anyone asks for it.
             Class::Servers => 3,
             Class::Thumbs => 500,
+            // Measured on `favorite/games`: `x-ratelimit-limit: 200, 200;w=60`.
+            Class::Library => 200,
         }
     }
 
@@ -80,6 +83,7 @@ impl Class {
             Class::Games => "game details",
             Class::Servers => "the server list",
             Class::Thumbs => "thumbnails",
+            Class::Library => "your favourites",
         }
     }
 }
@@ -1103,6 +1107,185 @@ fn uuid_like() -> String {
         pid as u16,
         (nanos >> 16) as u64 & 0xffff_ffff_ffff
     )
+}
+
+// ---- the library ----
+
+/// Roblox's own favourite list for one account.
+///
+/// Measured on 2026-11-18: `v2/users/{id}/favorite/games` answers an anonymous GET
+/// with `x-ratelimit-limit: 200, 200;w=60`, each entry's `id` **is** the universe id
+/// (hydrating it through `games?universeIds=` returns the same name), and
+/// `rootPlace.id` is the place a launch actually needs. So a page of fifty costs one
+/// call plus the hydration and icon calls every grid already makes, and the names
+/// arrive even when hydration does not.
+const FAVORITES: &str = "https://games.roblox.com/v2/users/";
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawFavourite {
+    id: u64,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    root_place: Option<RootPlace>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RootPlace {
+    id: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct RawFavourites {
+    #[serde(default)]
+    data: Vec<RawFavourite>,
+    #[serde(default, rename = "nextPageCursor")]
+    next: Option<String>,
+}
+
+/// One page of favourites, in Roblox's own order.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Shelf {
+    pub games: Vec<GameCard>,
+    /// The cursor Roblox gave for the following page, or none on the last one.
+    pub next: Option<String>,
+    pub fetched: u64,
+    pub cached: bool,
+    /// Set when the page arrived and something smaller inside it did not, so the
+    /// screen can name what is missing instead of drawing a blank tile and letting
+    /// it read as a game with no name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// Percent-encodes a cursor. The value is opaque base64 that can carry `+`, `/` and
+/// `=`, and an unescaped `+` arrives as a space, which Roblox answers with a 400.
+fn percent(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() * 2);
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char)
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+/// Favourites for one account. The page is cached for a couple of minutes because it
+/// changes when somebody clicks a star, not when somebody clicks Refresh.
+pub fn favorites(
+    budget: &Budget,
+    cache: &Cache,
+    user: u64,
+    cursor: Option<&str>,
+) -> Result<Shelf, LaunchError> {
+    let key = format!("fav:{user}:{}", cursor.unwrap_or("-"));
+    let held = cache.get(&key);
+    let cached = held.is_some();
+
+    let body = match held {
+        Some(body) => body,
+        None => {
+            budget.spend(Class::Library)?;
+            let mut url = format!(
+                "{FAVORITES}{user}/favorite/games?accessFilter=Public&limit=50&sortOrder=Desc"
+            );
+            if let Some(cursor) = cursor {
+                url.push_str("&cursor=");
+                url.push_str(&percent(cursor));
+            }
+
+            let answer = http::agent(Duration::from_secs(15))
+                .get(&url)
+                .header("Accept", "application/json")
+                .call()
+                .map_err(|e| {
+                    LaunchError::new(
+                        FailureCode::Network,
+                        format!("Your favourites could not be read: {e}."),
+                    )
+                    .with_action("Retry")
+                })?;
+
+            let status = answer.status().as_u16();
+            let body = answer.into_body().read_to_string().unwrap_or_default();
+            if status >= 400 {
+                return Err(LaunchError::new(
+                    FailureCode::Network,
+                    format!("The favourite list answered {status}: {body:.160}"),
+                )
+                .with_action("Retry"));
+            }
+
+            cache.put(&key, &body, Duration::from_secs(120));
+            body
+        }
+    };
+
+    let parsed: RawFavourites = serde_json::from_str(&body).map_err(|e| {
+        LaunchError::new(
+            FailureCode::Internal,
+            format!("The favourite list was not the documented shape: {e}."),
+        )
+    })?;
+
+    let ids: Vec<u64> = parsed.data.iter().map(|favourite| favourite.id).collect();
+    let mut note: Option<String> = None;
+
+    let details = match hydrate(budget, cache, &ids, None) {
+        Ok(details) => details,
+        Err(failure) => {
+            note = Some(format!("Player counts are missing: {}", failure.message));
+            BTreeMap::new()
+        }
+    };
+    let icons = match icons(budget, cache, &ids) {
+        Ok(icons) => icons,
+        Err(failure) => {
+            note = Some(match note {
+                Some(existing) => format!("{existing} Icons are missing too: {}", failure.message),
+                None => format!("Icons are missing: {}", failure.message),
+            });
+            BTreeMap::new()
+        }
+    };
+
+    let games = parsed
+        .data
+        .into_iter()
+        .map(|favourite| {
+            let detail = details.get(&favourite.id);
+            GameCard {
+                universe: favourite.id,
+                place: favourite
+                    .root_place
+                    .map(|place| place.id)
+                    .or_else(|| detail.map(|detail| detail.place))
+                    .unwrap_or(favourite.id),
+                name: detail
+                    .map(|detail| detail.name.clone())
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or(favourite.name),
+                players: detail.map(|detail| detail.players).unwrap_or(0),
+                creator: detail
+                    .map(|detail| detail.creator.clone())
+                    .unwrap_or_default(),
+                icon: icons.get(&favourite.id).cloned(),
+            }
+        })
+        .collect();
+
+    Ok(Shelf {
+        games,
+        next: parsed.next,
+        fetched: now(),
+        cached,
+        note,
+    })
 }
 
 #[cfg(test)]

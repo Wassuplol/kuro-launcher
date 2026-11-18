@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/shelf.png" alt="The home shelf: Roblox's own feed, six tiles across, read with the saved session" width="100%">
+  <img src="assets/shelf.webp" alt="The home shelf: Roblox's own feed, six tiles across, read with the saved session" width="100%">
 </p>
 
 The official Roblox front end is a website in a window. KURO is the same job built
@@ -31,6 +31,7 @@ KURO server, no account to create, and nothing to sign up for.
 | **Home** | Roblox's discovery feed, hydrated into tiles: icon, name, players. Six across, live counts |
 | **Search** | Games and people from Roblox's index, one deliberate query at a time |
 | **Game page** | Description, visits, rating, max players, and the public server list on a tab |
+| **Library** | The games the account has starred, paged and filterable, and this machine's own record of what it launched |
 | **Accounts** | Quick Login (six-character code or QR), cookie import, DPAPI vault, session health, forget, default |
 | **Launch** | A place id, a game link, a private invite, a friend, or one exact server. One client at a time, idempotent |
 | **Versions** | Discover across both install roots, direct install with hash and signature checks, pin, prune, verify, repair |
@@ -38,14 +39,18 @@ KURO server, no account to create, and nothing to sign up for.
 | **Shell** | Eight pages, a command palette, settings, named failures with a code, a cause and an action |
 
 <p align="center">
-  <img src="assets/search.png" alt="Search results for tower defense, rendered from Roblox's index" width="100%">
+  <img src="assets/search.webp" alt="Search results for tower defense, rendered from Roblox's index" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/library.webp" alt="The Library: the account's starred games, and the launches this machine started" width="100%">
 </p>
 
 ## What is not built
 
-Discovery is half done. Still missing: Library, Favourites, the Friends page, the
-assistant, and a release pipeline. The table above has no entry for them because
-they do not exist yet, not because they are hiding.
+Still missing: the Friends page, the assistant, and a release pipeline. The table
+above has no entry for them because they do not exist yet, not because they are
+hiding.
 
 ## Three things this app had to measure, not assume
 
@@ -71,7 +76,7 @@ is why the search box submits instead of typing, and why the server list is behi
 a tab.
 
 <p align="center">
-  <img src="assets/game.png" alt="A game page: description, visits, rating and the launch handoff" width="100%">
+  <img src="assets/game.webp" alt="A game page: description, visits, rating and the launch handoff" width="100%">
 </p>
 
 ## How it is built
@@ -85,11 +90,12 @@ src-tauri/src/
   launch/      target parsing, ticket minting, the roblox-player string, spawn
   supply/      install roots, the package manifest, direct install, verify, prune
   flags/       the catalogue, profiles, scopes, the allowlist, the lease
+  library.rs   this machine's own record of what it launched
   error.rs     every failure has a code, a cause and an action
 src/
   screens/     Home, Search, Game, Launch, Accounts, Flags, Versions, Library, Friends
   panels/      the bodies of those pages, plus the palette and settings drawers
-  store/       zustand: shell, accounts, versions, flags, discovery
+  store/       zustand: shell, accounts, versions, flags, discovery, library
 tools/
   cdp.mjs         drives the running webview over the Chrome DevTools Protocol
   page-layout.mjs walks every page and fails on overlapping blocks or a pinned element

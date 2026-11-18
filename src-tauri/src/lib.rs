@@ -4,6 +4,7 @@ pub mod flags;
 pub mod http;
 pub mod identity;
 pub mod launch;
+pub mod library;
 pub mod settings;
 pub mod supply;
 
@@ -1011,6 +1012,44 @@ async fn discovery_servers(
         .map_err(|e| worker_failed(format!("The server list was not read: {e}")))?
 }
 
+/// One page of the account's favourites, hydrated into the same cards every other
+/// grid draws. Favourites are public, so this does not need the session.
+#[tauri::command]
+async fn library_favorites(
+    state: State<'_, AppState>,
+    user_id: u64,
+    cursor: Option<String>,
+) -> Result<discovery::Shelf, LaunchError> {
+    let budget = state.budget.clone();
+    let cache = state.cache.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        discovery::favorites(&budget, &cache, user_id, cursor.as_deref())
+    })
+    .await
+    .map_err(|e| worker_failed(format!("Your favourites were not read: {e}")))?
+}
+
+/// What this machine launched, newest first.
+#[tauri::command]
+fn library_recent(state: State<'_, AppState>) -> library::Log {
+    library::load(&state.data_root)
+}
+
+/// Records a launch that actually started. Called after `launch_start` answers,
+/// because the page is what knows which game a place belongs to.
+#[tauri::command]
+fn library_record(
+    state: State<'_, AppState>,
+    entry: library::Played,
+) -> Result<library::Log, LaunchError> {
+    library::record(&state.data_root, entry)
+}
+
+#[tauri::command]
+fn library_clear(state: State<'_, AppState>) -> Result<library::Log, LaunchError> {
+    library::clear(&state.data_root)
+}
+
 /// What is left of each allowance, so a screen can say why a button is waiting.
 #[tauri::command]
 fn discovery_budget(state: State<'_, AppState>) -> Vec<(String, usize, usize)> {
@@ -1020,6 +1059,7 @@ fn discovery_budget(state: State<'_, AppState>) -> Vec<(String, usize, usize)> {
         discovery::Class::Games,
         discovery::Class::Servers,
         discovery::Class::Thumbs,
+        discovery::Class::Library,
     ])
 }
 
@@ -1414,6 +1454,10 @@ pub fn run() {
             discovery_game,
             discovery_servers,
             discovery_budget,
+            library_favorites,
+            library_recent,
+            library_record,
+            library_clear,
             flags_view,
             flags_refresh,
             flags_search,
