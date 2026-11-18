@@ -440,6 +440,13 @@ export type AssistantFinished = {
  * One launch, as the client's own log recorded it. Every field is either written by
  * the client or absent; nothing here is inferred from the website.
  */
+export type Adapter = {
+  name: string;
+  vramMb: number | null;
+  /** The one the client actually used. */
+  chosen: boolean;
+};
+
 export type Receipt = {
   id: string;
   version: string;
@@ -458,6 +465,8 @@ export type Receipt = {
   adapter: string | null;
   api: string | null;
   vramMb: number | null;
+  /** Every GPU the client enumerated for this launch. */
+  adapters: Adapter[];
   shutdownStage: string | null;
   httpErrors: number;
   lastHttp: string | null;

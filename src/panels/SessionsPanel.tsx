@@ -135,6 +135,7 @@ export function SessionsBody() {
   return (
     <>
       <Summary totals={totals} />
+      <Machine receipts={receipts} />
 
       <Section
         title="Launches on this machine"
@@ -168,6 +169,48 @@ export function SessionsBody() {
         keeps the recent ones and deletes the rest, so an empty week is the folder, not the app.
       </p>
     </>
+  );
+}
+
+/**
+ * Which GPU the client actually ran on, said in one line under the totals.
+ *
+ * The client enumerates every adapter and then names the one it chose, so this is a
+ * reading rather than a guess. When the chosen card is not the largest one on the
+ * machine, that is worth saying plainly: Windows decides per program.
+ */
+function Machine({ receipts }: { receipts: Receipt[] }) {
+  const newest = receipts.find((receipt) => receipt.adapters.length > 0);
+  if (!newest) return null;
+
+  const chosen = newest.adapters.find((adapter) => adapter.chosen) ?? null;
+  const others = newest.adapters.filter((adapter) => !adapter.chosen && adapter.vramMb);
+  const biggest = newest.adapters.reduce<Receipt["adapters"][number] | null>(
+    (best, adapter) => ((adapter.vramMb ?? 0) > (best?.vramMb ?? 0) ? adapter : best),
+    null,
+  );
+  const wrong = chosen && biggest && chosen.name !== biggest.name;
+
+  return (
+    <div className="mt-3">
+      <p className="flex flex-wrap items-baseline gap-x-2 text-[11.5px] text-muted">
+        <span className="label">Graphics</span>
+        <span className="text-body">{chosen?.name ?? "not recorded"}</span>
+        {chosen?.vramMb ? <span className="num">{Math.round(chosen.vramMb / 1024)} GB</span> : null}
+        {newest.api ? <span className="num">{newest.api}</span> : null}
+        {others.length > 0 ? (
+          <span className="text-muted">
+            · also present: {others.map((adapter) => adapter.name).join(", ")}
+          </span>
+        ) : null}
+      </p>
+      {wrong ? (
+        <p className="mt-1 text-[11.5px] text-gold">
+          Windows sent the client to {chosen?.name}, not the larger {biggest?.name}. That is a
+          per-program Windows setting, not a Roblox flag.
+        </p>
+      ) : null}
+    </div>
   );
 }
 

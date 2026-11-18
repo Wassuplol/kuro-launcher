@@ -49,6 +49,15 @@ pub enum Outcome {
     Crashed,
 }
 
+/// One GPU the client saw, and whether it is the one it used.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Adapter {
+    pub name: String,
+    pub vram_mb: Option<u64>,
+    pub chosen: bool,
+}
+
 /// One launch, as the client recorded it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,6 +81,9 @@ pub struct Receipt {
     pub adapter: Option<String>,
     pub api: Option<String>,
     pub vram_mb: Option<u64>,
+    /// Every GPU the client enumerated, with the chosen one marked. This is what makes
+    /// "the client is on the wrong card" observable instead of a guess.
+    pub adapters: Vec<Adapter>,
     pub shutdown_stage: Option<String>,
     /// How many failed HTTP requests the client logged, and the last one.
     pub http_errors: u64,
@@ -176,6 +188,7 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
     let mut join_seconds = None;
     let mut handshake = false;
     let mut adapter = None;
+    let mut adapters: Vec<Adapter> = Vec::new();
     let mut api = None;
     let mut vram_mb = None;
     let mut shutdown_stage = None;
@@ -243,6 +256,33 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
             }
         }
 
+        // `Adapter[0] info: Description=<name>, VendorId=..., DedicatedVideoMemory=<bytes>`
+        if let Some(at) = line.find("Adapter[") {
+            if line.contains(" info: ") {
+                let rest = &line[at..];
+                let name = rest
+                    .find("Description=")
+                    .map(|start| {
+                        let tail = &rest[start + "Description=".len()..];
+                        let end = tail.find(", VendorId=").unwrap_or(tail.len());
+                        tail[..end].trim().to_string()
+                    })
+                    .unwrap_or_default();
+                let vram = rest
+                    .find("DedicatedVideoMemory=")
+                    .and_then(|start| digits(&rest[start + "DedicatedVideoMemory=".len()..]))
+                    .map(|bytes| bytes / (1024 * 1024))
+                    .filter(|mb| *mb > 0);
+                if !name.is_empty() {
+                    adapters.push(Adapter {
+                        name,
+                        vram_mb: vram,
+                        chosen: false,
+                    });
+                }
+            }
+        }
+
         if let Some(at) = line.find("GfxFeatureLevel ") {
             let rest = line[at + "GfxFeatureLevel ".len()..].trim();
             let level = rest.split_whitespace().next().unwrap_or("");
@@ -290,6 +330,12 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
         }
     }
 
+    if let Some(chosen) = &adapter {
+        for item in adapters.iter_mut() {
+            item.chosen = item.name == *chosen;
+        }
+    }
+
     let seconds = seconds.max(join_seconds.unwrap_or(0));
     let outcome = if crash {
         Outcome::Crashed
@@ -305,12 +351,14 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
         Outcome::NeverJoined
     };
 
+    // The duration is on the row already, so the sentence carries the reason instead
+    // of repeating the number: say a fact once.
     let verdict = match outcome {
-        Outcome::Left => format!("Ran for {} and left cleanly.", span(seconds)),
-        Outcome::Ended => format!(
-            "Ran for {}. The log stops without a shutdown line, which is what closing the window looks like.",
-            span(seconds)
-        ),
+        Outcome::Left => "Left cleanly.".to_string(),
+        Outcome::Ended => {
+            "The log stops without a shutdown line, which is what closing the window looks like."
+                .to_string()
+        }
         Outcome::NoHandshake => {
             let mut text = "Stopped before it reached a server.".to_string();
             if let Some(last) = &last_http {
@@ -323,11 +371,10 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
             text
         }
         Outcome::NeverJoined => {
-            "The client opened but never asked for a place. Usually the bootstrapper handing over.".to_string()
+            "The client opened but never asked for a place. Usually the bootstrapper handing over."
+                .to_string()
         }
-        Outcome::Crashed => {
-            "The client logged a crash while it was running.".to_string()
-        }
+        Outcome::Crashed => "The client logged a crash while it was running.".to_string(),
     };
 
     let action = match outcome {
@@ -354,6 +401,7 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
         adapter,
         api,
         vram_mb,
+        adapters,
         shutdown_stage,
         http_errors,
         last_http,
@@ -591,6 +639,8 @@ mod tests {
 
     const CLEAN: &str = "\
 2026-11-18T16:13:44.389Z,0.389293,b668,6,Info [DFLog::Mimalloc] mi_option_reserve_os_memory=0
+2026-11-18T16:13:44.581Z,0.581731,b668,6 [FLog::Graphics] Adapter[0] info: Description=NVIDIA GeForce RTX 5070 Ti, VendorId=0x10de, DeviceId=0x2c05, DedicatedVideoMemory=16771973120, DedicatedSystemMemory=0
+2026-11-18T16:13:44.581Z,0.581731,b668,6 [FLog::Graphics] Adapter[1] info: Description=AMD Radeon(TM) Graphics, VendorId=0x1002, DeviceId=0x13c0, DedicatedVideoMemory=2119966720, DedicatedSystemMemory=0
 2026-11-18T16:13:45.206Z,1.206065,b668,6 [FLog::Graphics] D3D11 Adapter: NVIDIA GeForce RTX 5070 Ti
 2026-11-18T16:13:45.206Z,1.206065,b668,6 [FLog::Graphics] D3D11 Adapter: Vendor 10de Device 2c05 VRAM 15995 RAM 46696
 2026-11-18T16:13:45.219Z,1.219940,b668,6,Warning [FLog::Graphics] D3D11: GfxCardName NVIDIA GeForce RTX 5070 Ti GfxCardVendor 10de GfxFeatureLevel D3D11.1
@@ -644,11 +694,18 @@ mod tests {
         );
         assert_eq!(receipt.vram_mb, Some(15_995));
         assert_eq!(receipt.api.as_deref(), Some("D3D11.1"));
+        assert_eq!(receipt.adapters.len(), 2);
+        assert_eq!(receipt.adapters[0].name, "NVIDIA GeForce RTX 5070 Ti");
+        assert_eq!(receipt.adapters[0].vram_mb, Some(15_995));
+        assert!(receipt.adapters[0].chosen);
+        assert_eq!(receipt.adapters[1].name, "AMD Radeon(TM) Graphics");
+        assert_eq!(receipt.adapters[1].vram_mb, Some(2_021));
+        assert!(!receipt.adapters[1].chosen);
         assert_eq!(receipt.shutdown_stage.as_deref(), Some("UGCGame"));
         assert_eq!(receipt.join_seconds, Some(117));
         assert_eq!(receipt.seconds, 402);
         assert_eq!(receipt.outcome, Outcome::Left);
-        assert_eq!(receipt.verdict, "Ran for 6m 42s and left cleanly.");
+        assert_eq!(receipt.verdict, "Left cleanly.");
         assert_eq!(receipt.action, None);
         assert_eq!(receipt.started, 1_795_018_424);
     }
