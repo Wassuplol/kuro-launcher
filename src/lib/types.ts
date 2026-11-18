@@ -362,6 +362,32 @@ export type FlagsView = {
   playerRunning: boolean;
 };
 
+/** One stored flag catalogue, named by the client version it was served for. */
+export type FlagSnapshot = {
+  version: string;
+  at: number;
+  keys: number;
+};
+
+export type FlagChange = {
+  key: string;
+  before: string | null;
+  after: string | null;
+};
+
+/** What moved between two stored catalogues. Counts are the full numbers, lists capped. */
+export type FlagDiff = {
+  from: FlagSnapshot;
+  to: FlagSnapshot;
+  added: FlagChange[];
+  removed: FlagChange[];
+  changed: FlagChange[];
+  addedCount: number;
+  removedCount: number;
+  changedCount: number;
+  truncated: boolean;
+};
+
 export type ImportedFlags = {
   name: string;
   values: Record<string, unknown>;

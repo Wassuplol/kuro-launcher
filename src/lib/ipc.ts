@@ -8,9 +8,11 @@ import type {
   ClientKind,
   FlagsView,
   FlagCatalog,
+  FlagDiff,
   FlagHit,
   FlagLease,
   FlagRow,
+  FlagSnapshot,
   FlagStore,
   DiscoveryFeed,
   DiscoverySearch,
@@ -205,6 +207,10 @@ export const api = {
 
   flagsView: () => call<FlagsView>("flags_view"),
   flagsRefresh: () => call<FlagCatalog>("flags_refresh"),
+  /** Catalogues kept so far, newest first. */
+  flagsSnapshots: () => call<FlagSnapshot[]>("flags_snapshots"),
+  /** What moved between two stored catalogues. */
+  flagsDiff: (from: string, to: string) => call<FlagDiff>("flags_diff", { from, to }),
   flagsSearch: (query: string, limit?: number) =>
     call<FlagHit[]>("flags_search", { query, limit }),
   flagsSaveProfile: (name: string, values: Record<string, unknown>) =>

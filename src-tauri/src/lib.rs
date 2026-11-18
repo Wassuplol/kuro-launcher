@@ -1187,9 +1187,46 @@ async fn flags_view(state: State<'_, AppState>) -> Result<FlagsView, LaunchError
 #[tauri::command]
 async fn flags_refresh(state: State<'_, AppState>) -> Result<flags::catalog::Catalog, LaunchError> {
     let root = state.data_root.clone();
-    tauri::async_runtime::spawn_blocking(move || flags::catalog::refresh(&root))
-        .await
-        .map_err(|e| worker_failed(format!("The flag list was not refreshed: {e}")))?
+    let pinned = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.supply.pinned.clone()
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let catalog = flags::catalog::refresh(&root)?;
+
+        // The catalogue is served for the build Roblox is shipping, so the build a
+        // launch would run is the label it is kept under. Two snapshots labelled "the
+        // one from Tuesday" cannot answer "which keys changed between 0.748 and 0.750".
+        let version = supply::discover_all(&pinned, None)
+            .ok()
+            .and_then(|installed| launch::client_for(&installed, &pinned))
+            .map(|client| client.version.unwrap_or(client.folder));
+
+        if let Some(version) = version {
+            flags::catalog::keep_snapshot(&root, &version, &catalog)?;
+        }
+
+        Ok(catalog)
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The flag list was not refreshed: {e}")))?
+}
+
+/// Every catalogue kept so far, newest first, for a diff to pick from.
+#[tauri::command]
+fn flags_snapshots(state: State<'_, AppState>) -> Vec<flags::catalog::Snapshot> {
+    flags::catalog::snapshots(&state.data_root)
+}
+
+/// What moved between two stored catalogues.
+#[tauri::command]
+fn flags_diff(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> Result<flags::catalog::Diff, LaunchError> {
+    flags::catalog::diff(&state.data_root, &from, &to)
 }
 
 #[tauri::command]
@@ -2133,6 +2170,8 @@ pub fn run() {
             assistant_stop,
             flags_view,
             flags_refresh,
+            flags_snapshots,
+            flags_diff,
             flags_search,
             flags_save_profile,
             flags_delete_profile,

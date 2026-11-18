@@ -4,8 +4,8 @@ import { Badge, Row, Section } from "../components/Panel";
 import { Toggle } from "../components/Toggle";
 import { cn } from "../lib/cn";
 import { ago } from "../lib/format";
-import type { FlagKind } from "../lib/types";
-import { api } from "../lib/ipc";
+import type { FlagChange, FlagDiff, FlagKind, FlagSnapshot } from "../lib/types";
+import { api, CommandError } from "../lib/ipc";
 import { useAccounts } from "../store/accounts";
 import { useFlags } from "../store/flags";
 
@@ -63,6 +63,7 @@ export function FlagsBody() {
       ) : null}
 
       <Catalog />
+      <BetweenBuilds />
       <Profiles />
       <Scopes account={accounts ?? []} />
 
@@ -71,6 +72,197 @@ export function FlagsBody() {
           the profile rows it was floating above. */}
       <Write />
     </>
+  );
+}
+
+/**
+ * Two catalogues, side by side.
+ *
+ * Roblox serves one bucket at a time, so the only way to answer "what changed in the
+ * new build" is to have kept the old answer. Each fetch keeps a copy named for the live
+ * version; this section compares any two of them and interprets nothing beyond the
+ * three things a value can do: appear, stop being served, or change.
+ */
+function BetweenBuilds() {
+  const [snaps, setSnaps] = useState<FlagSnapshot[] | null>(null);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [diff, setDiff] = useState<FlagDiff | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void api
+      .flagsSnapshots()
+      .then((list) => {
+        if (!live) return;
+        setSnaps(list);
+        // The list is newest first, so the two newest are the pair worth showing.
+        const newer = list[0];
+        const older = list[1];
+        if (older && newer) {
+          setFrom(older.version);
+          setTo(newer.version);
+        }
+      })
+      .catch(() => {
+        if (live) setSnaps([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!from || !to || from === to) {
+      setDiff(null);
+      return;
+    }
+    let live = true;
+    void api
+      .flagsDiff(from, to)
+      .then((result) => {
+        if (!live) return;
+        setDiff(result);
+        setProblem(null);
+      })
+      .catch((value) => {
+        if (!live) return;
+        setDiff(null);
+        setProblem(value instanceof CommandError ? value.message : String(value));
+      });
+    return () => {
+      live = false;
+    };
+  }, [from, to]);
+
+  if (snaps === null) {
+    return (
+      <Section title="Between two builds">
+        <Row label="Reading the kept catalogues" />
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Between two builds">
+      {snaps.length === 0 ? (
+        <Row
+          label="No catalogue kept yet"
+          hint="Reading Roblox's list once keeps a copy named for the live build. Read it again after a Roblox update and the two can be compared."
+        />
+      ) : snaps.length === 1 ? (
+        <Row
+          label={`One catalogue kept, for ${snaps[0]?.version ?? "an unrecorded build"}`}
+          hint="A second one needs a second fetch, which only means something after Roblox ships a new build."
+        />
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2 px-3.5 py-2.5">
+            <select
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+              aria-label="The older build"
+              className="ui h-8 min-w-0 flex-1 rounded-control border border-white/10 bg-raised px-2 text-[12px] text-body"
+            >
+              {snaps.map((snap) => (
+                <option key={snap.version} value={snap.version}>
+                  {snap.version} · {snap.keys.toLocaleString()} keys
+                </option>
+              ))}
+            </select>
+            <span className="text-[11px] text-muted">becomes</span>
+            <select
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+              aria-label="The newer build"
+              className="ui h-8 min-w-0 flex-1 rounded-control border border-white/10 bg-raised px-2 text-[12px] text-body"
+            >
+              {snaps.map((snap) => (
+                <option key={snap.version} value={snap.version}>
+                  {snap.version} · {snap.keys.toLocaleString()} keys
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {from === to ? (
+            <Row label="Same build on both sides" hint="Pick two different versions." />
+          ) : diff ? (
+            <>
+              <div className="grid grid-cols-3 border-y border-white/8">
+                <Count label="changed" value={diff.changedCount} tone="text-gold" />
+                <Count label="added" value={diff.addedCount} tone="text-success" />
+                <Count label="removed" value={diff.removedCount} tone="text-danger" />
+              </div>
+              <Changes title="Changed" rows={diff.changed} total={diff.changedCount} />
+              <Changes title="Added" rows={diff.added} total={diff.addedCount} />
+              <Changes title="Removed" rows={diff.removed} total={diff.removedCount} />
+              {diff.changedCount + diff.addedCount + diff.removedCount === 0 ? (
+                <Row label="Nothing changed" hint="Both catalogues carry the same keys and the same values." />
+              ) : null}
+              {diff.truncated ? (
+                <p className="px-3.5 py-2 text-[11px] leading-[1.55] text-muted">
+                  The lists stop at 200 rows each. The counts above are the whole number.
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      )}
+
+      {problem ? (
+        <p className="border-t border-white/6 px-3.5 py-2 text-[11px] leading-[1.55] text-danger">
+          {problem}
+        </p>
+      ) : null}
+    </Section>
+  );
+}
+
+function Count({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="px-4 py-2.5 not-first:border-l not-first:border-white/8">
+      <div className={cn("num text-[16px] leading-none", tone)}>{value.toLocaleString()}</div>
+      <div className="label mt-1.5">{label}</div>
+    </div>
+  );
+}
+
+/** Six rows in the section, and the rest counted rather than listed. */
+const SHOWN = 6;
+
+function Changes({
+  title,
+  rows,
+  total,
+}: {
+  title: string;
+  rows: FlagChange[];
+  total: number;
+}) {
+  if (total === 0) return null;
+
+  return (
+    <div className="border-t border-white/6">
+      <div className="flex items-baseline justify-between px-3.5 pt-2">
+        <span className="label">{title}</span>
+        <span className="num text-[10.5px] text-muted">{total.toLocaleString()}</span>
+      </div>
+      {rows.slice(0, SHOWN).map((row) => (
+        <div key={row.key} className="flex items-baseline justify-between gap-3 px-3.5 py-[3px]">
+          <span className="truncate font-mono text-[11px] text-body">{row.key}</span>
+          <span className="num shrink-0 font-mono text-[11px] text-muted">
+            {row.before ?? "not served"} → {row.after ?? "gone"}
+          </span>
+        </div>
+      ))}
+      {total > SHOWN ? (
+        <p className="px-3.5 pt-1 pb-2 text-[10.5px] text-muted">and {total - SHOWN} more</p>
+      ) : (
+        <div className="pb-1.5" />
+      )}
+    </div>
   );
 }
 
