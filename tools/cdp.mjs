@@ -3,12 +3,14 @@
 //   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--remote-debugging-port=9333"
 //
 //   node tools/cdp.mjs eval "<javascript expression>"
+//   node tools/cdp.mjs script <file.js>          (same, read from disk)
 //   node tools/cdp.mjs shot <path.png>
 //   node tools/cdp.mjs type "<css selector>" <text>
 //   node tools/cdp.mjs key <Enter|Tab|Escape>
 //   node tools/cdp.mjs click <x> <y>
+//   node tools/cdp.mjs drag <x1> <y1> <x2> <y2>
 
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const PORT = process.env.KURO_CDP_PORT ?? "9333";
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -60,8 +62,11 @@ const [command, ...rest] = process.argv.slice(2);
 const session = await connect(await pageSocket());
 
 try {
-  if (command === "eval") {
-    const expression = rest.join(" ");
+  if (command === "eval" || command === "script") {
+    // `script` reads the expression from a file. Quoting a multi-line probe
+    // through PowerShell into a native command mangles the inner quotes, so
+    // anything longer than one line goes to disk first.
+    const expression = command === "script" ? readFileSync(rest[0], "utf8") : rest.join(" ");
     const result = await session.send("Runtime.evaluate", {
       expression,
       awaitPromise: true,
@@ -102,6 +107,39 @@ try {
       });
     }
     console.log(`clicked ${x},${y}`);
+  } else if (command === "drag") {
+    // A press, a stream of moves, a release, all trusted by the renderer. This
+    // proves a drag handler runs and what it calls; it cannot prove the OS moved
+    // the window, because the move loop tracks the physical button.
+    const [x1, y1, x2, y2] = rest.map(Number);
+    await session.send("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x: x1,
+      y: y1,
+      button: "left",
+      clickCount: 1,
+      buttons: 1,
+    });
+    const steps = 12;
+    for (let i = 1; i <= steps; i++) {
+      await session.send("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x: x1 + ((x2 - x1) * i) / steps,
+        y: y1 + ((y2 - y1) * i) / steps,
+        button: "left",
+        buttons: 1,
+      });
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    await session.send("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: x2,
+      y: y2,
+      button: "left",
+      clickCount: 1,
+      buttons: 0,
+    });
+    console.log(`dragged ${x1},${y1} to ${x2},${y2}`);
   } else if (command === "key") {
     const name = rest[0];
     const mods = rest[1] ?? "";
@@ -132,7 +170,7 @@ try {
     });
     console.log(`pressed ${mods ? mods + "+" : ""}${name}`);
   } else {
-    console.error("usage: eval | shot | type | key | click");
+    console.error("usage: eval | script | shot | type | key | click | drag");
     process.exitCode = 1;
   }
 } finally {

@@ -83,16 +83,39 @@ jobs:
       - name: build the installers
         run: pnpm tauri build
 
-      - name: checksums
+      # GitHub rewrites a space in an asset name to a dot, so an installer called
+      # "Kuro Launcher_0.1.0_x64-setup.exe" is served as
+      # "Kuro.Launcher_0.1.0_x64-setup.exe". A checksum list naming the local file
+      # then verifies against nothing a downloader has. Rename once, here, so the
+      # sum sheet and the release agree byte for byte.
+      - name: name the artifacts for the web
         shell: bash
         run: |
           set -euo pipefail
           cd src-tauri/target/release/bundle
+          shopt -s nullglob
+          for f in nsis/*.exe msi/*.msi; do
+            base=$(basename "$f")
+            if [[ "$base" == *" "* ]]; then
+              mv "$f" "$(dirname "$f")/${base// /-}"
+            fi
+          done
+          ls -la nsis msi
+
+      # Bare file names, no directories: a sum sheet is checked next to the files
+      # it names, in the folder the download landed in. The portable exe is listed
+      # too, because the release notes tell people to trust this file.
+      - name: checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd src-tauri/target/release
           : > "$GITHUB_WORKSPACE/SHA256SUMS.txt"
-          find . \( -name "*.exe" -o -name "*.msi" \) -print0 | sort -z |
-            while IFS= read -r -d '' file; do
-              sha256sum "$file" >> "$GITHUB_WORKSPACE/SHA256SUMS.txt"
-            done
+          for f in bundle/nsis/*.exe bundle/msi/*.msi kuro-launcher.exe; do
+            hash=$(sha256sum "$f" | cut -d' ' -f1)
+            echo "$hash  $(basename "$f")" >> "$GITHUB_WORKSPACE/SHA256SUMS.txt"
+          done
+          sort -k2 -o "$GITHUB_WORKSPACE/SHA256SUMS.txt" "$GITHUB_WORKSPACE/SHA256SUMS.txt"
           cat "$GITHUB_WORKSPACE/SHA256SUMS.txt"
 
       - uses: actions/upload-artifact@v4
