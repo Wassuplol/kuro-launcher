@@ -2,6 +2,7 @@ import { animate } from "animejs";
 import gsap from "gsap";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { CrystalStage } from "../components/CrystalStage";
 import { api } from "../lib/ipc";
 import { greeting } from "../lib/format";
 import { useReducedMotion } from "../lib/useReducedMotion";
@@ -243,6 +244,9 @@ export function Opening({ target, onDone }: Props) {
 
   const label = STEPS.find((step) => step.stage === stage)?.label ?? "Ready";
   const progress = done / STEPS.length;
+  // The shard forms as the work completes, and is always whole by the time the
+  // window starts growing: the scene never runs long for decoration's sake.
+  const form = Math.min(1, 0.25 + progress * 0.75);
   const greetingText = name ? `${greeting()}, ${name}` : version ? `v${version}` : "Welcome";
 
   return (
@@ -257,6 +261,25 @@ export function Opening({ target, onDone }: Props) {
           : undefined
       }
     >
+      {reduced ? null : (
+        <>
+          <CrystalStage form={form} exit={leaving ? 1 : 0} />
+          {/* A scrim between the shader and the words: the crystal is allowed to be
+              bright, the type is not allowed to be unreadable. */}
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              // A vignette only. An earlier version also dimmed the centre, which
+              // is exactly where the shard is, and it turned a lit crystal into a
+              // dark watermark. The type sits over the shard's calm middle band.
+              background:
+                "radial-gradient(120% 95% at 50% 40%, rgba(8,10,16,0) 34%, rgba(8,10,16,0.55) 74%, rgba(8,10,16,0.92) 100%)",
+            }}
+          />
+        </>
+      )}
+
       <div
         className="open-art relative flex h-[116px] w-[116px] items-center justify-center"
         style={{ opacity: reduced ? 1 : undefined }}
