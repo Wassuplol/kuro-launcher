@@ -202,3 +202,87 @@ export type MultiInstance = {
   /** False when another program already held the lock, so it applies next start. */
   created: boolean;
 };
+
+/** A flag's value is whatever its name promises: bool, int, number or text. */
+export type FlagKind = "flag" | "int" | "string" | "log" | "number" | "unknown";
+
+export type FlagHit = {
+  key: string;
+  /** Absent when Roblox does not serve the key, which means no known default. */
+  default: string | null;
+  kind: FlagKind;
+};
+
+export type FlagSource = "account" | "game" | "global";
+
+export type FlagRow = {
+  key: string;
+  value: unknown;
+  source: FlagSource;
+  profile: string;
+  kind: FlagKind;
+};
+
+export type FlagProfile = {
+  name: string;
+  notes: string;
+  values: Record<string, unknown>;
+};
+
+export type FlagScopes = {
+  global: string | null;
+  accounts: Record<string, string>;
+  games: Record<string, string>;
+};
+
+export type FlagStore = {
+  schema: number;
+  profiles: FlagProfile[];
+  scopes: FlagScopes;
+};
+
+export type FlagCatalog = {
+  fetched: number;
+  application: string;
+  values: Record<string, string>;
+};
+
+export type Placement = "user" | "version";
+
+export type FlagTarget = {
+  placement: Placement;
+  label: string;
+  note: string;
+  path: string;
+  exists: boolean;
+  /** What is already in that file, whoever put it there. */
+  current: Record<string, unknown>;
+  client: string | null;
+};
+
+export type FlagLease = {
+  at: number;
+  path: string;
+  keys: number;
+  backup: string | null;
+  hash: string;
+};
+
+export type FlagExport = { name: string; path: string; keys: number };
+
+export type FlagsView = {
+  catalog: FlagCatalog | null;
+  store: FlagStore;
+  target: FlagTarget | null;
+  lease: FlagLease | null;
+  exports: FlagExport[];
+  recovered: string | null;
+  placement: Placement;
+  playerRunning: boolean;
+};
+
+export type ImportedFlags = {
+  name: string;
+  values: Record<string, unknown>;
+  refused: string[];
+};

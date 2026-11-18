@@ -5,6 +5,7 @@ import { cn } from "../lib/cn";
 import { api } from "../lib/ipc";
 import { AccountsPanel } from "../panels/AccountsPanel";
 import { CommandPalette } from "../panels/CommandPalette";
+import { FlagsPanel } from "../panels/FlagsPanel";
 import { LaunchPanel } from "../panels/LaunchPanel";
 import { Onboarding } from "../panels/Onboarding";
 import { Opening } from "../panels/Opening";
@@ -110,6 +111,7 @@ export function App() {
       {ready ? <CommandPalette /> : null}
       {ready ? <SettingsPanel /> : null}
       {ready ? <VersionsPanel /> : null}
+      {ready ? <FlagsPanel /> : null}
       {ready ? <LaunchPanel /> : null}
       {ready ? <AccountsPanel /> : null}
 

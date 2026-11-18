@@ -124,10 +124,13 @@ pub fn player_running() -> bool {
 }
 
 /// Starts one client, detached, with the launch string as its only argument.
-pub fn spawn(exe: &Path, uri: &str) -> Result<u32, LaunchError> {
+///
+/// The child is returned rather than dropped: a flag lease is released when it
+/// exits, and that is the only moment the caller knows the session is over.
+pub fn spawn(exe: &Path, uri: &str) -> Result<std::process::Child, LaunchError> {
     use std::os::windows::process::CommandExt;
 
-    let child = std::process::Command::new(exe)
+    std::process::Command::new(exe)
         .arg(uri)
         .creation_flags(CREATE_NO_WINDOW)
         .spawn()
@@ -140,7 +143,5 @@ pub fn spawn(exe: &Path, uri: &str) -> Result<u32, LaunchError> {
                 ),
             )
             .with_action("Open Roblox versions")
-        })?;
-
-    Ok(child.id())
+        })
 }

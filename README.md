@@ -34,6 +34,7 @@ exactly where the line is.
 | Client versions: discover, install, verify, pin, prune | |
 | Accounts: Quick Login, cookie import, DPAPI vault, health, forget | |
 | Launch: a link, an invite or a place id, as any saved account | Discovery, then social (M6, M7) |
+| Flags: Roblox's own catalogue, profiles, scopes, a write you can undo | |
 | A command palette with ten working commands | Discovery, then social, then the assistant |
 | Settings, including reset and crash recovery | |
 | Named failures: a code, a cause, an action | |

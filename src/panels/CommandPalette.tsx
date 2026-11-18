@@ -19,6 +19,7 @@ export function CommandPalette() {
   const openVersions = useShell((state) => state.openVersions);
   const openAccounts = useShell((state) => state.openAccounts);
   const openLaunch = useShell((state) => state.openLaunch);
+  const openFlags = useShell((state) => state.openFlags);
   const openOnboarding = useShell((state) => state.openOnboarding);
   const openDataRoot = useShell((state) => state.openDataRoot);
   const settings = useShell((state) => state.settings);
@@ -104,6 +105,17 @@ export function CommandPalette() {
               >
                 <UserRound size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
                 <span>Open accounts</span>
+              </Command.Item>
+
+              <Command.Item
+                value="flags fastflags configure tune"
+                onSelect={() => {
+                  close();
+                  openFlags();
+                }}
+              >
+                <SlidersHorizontal size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
+                <span>Open flags</span>
               </Command.Item>
 
               <Command.Item

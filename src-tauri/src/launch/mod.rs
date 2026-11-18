@@ -61,6 +61,9 @@ pub struct Launched {
     /// client was spawned.
     pub reused: bool,
     pub detail: String,
+    /// What happened to the flag file: written, or why it was left alone. A
+    /// flag failure never stops a launch, so it is reported here instead.
+    pub flags: Option<String>,
 }
 
 /// What the drawer shows for a pasted destination before anything is started.

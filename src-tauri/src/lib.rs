@@ -1,4 +1,5 @@
 pub mod error;
+pub mod flags;
 pub mod http;
 pub mod identity;
 pub mod launch;
@@ -29,6 +30,9 @@ pub struct AppState {
     /// Held for the life of the app while multi-instance is on. Dropping it
     /// hands the lock back to Roblox, which is the whole mechanism.
     pub singleton: Mutex<Option<launch::spawn::Singleton>>,
+    /// A flag file that was put back after a crash, reported once so the screen
+    /// can say what happened instead of leaving it invisible.
+    pub recovered: Mutex<Option<String>>,
     pub supply: SupplyState,
     /// Set once the page has taken control of the window. Until then the window
     /// stays hidden, so nothing full-size is ever painted before the opening.
@@ -392,6 +396,42 @@ fn open_site(url: String) -> Result<(), LaunchError> {
         })
 }
 
+/// Writes the flags that apply to one launch, and says what happened either way.
+fn apply_flags_for(
+    root: &std::path::Path,
+    placement: flags::Placement,
+    installed: &[supply::InstalledClient],
+    pinned: &Option<String>,
+    account: u64,
+    place: Option<u64>,
+) -> (bool, Option<String>) {
+    let store = match flags::store::load(root) {
+        Ok(store) => store,
+        Err(error) => return (false, Some(error.message)),
+    };
+
+    let rows = flags::store::resolve(&store, Some(account), place);
+    if rows.is_empty() {
+        return (
+            false,
+            Some("No flags apply to this account and place.".to_string()),
+        );
+    }
+
+    let target = match flags::target(placement, installed, pinned) {
+        Ok(target) => target,
+        Err(error) => return (false, Some(error.message)),
+    };
+
+    match flags::apply::apply(root, std::path::Path::new(&target.path), &rows) {
+        Ok(lease) => (
+            true,
+            Some(format!("{} flags written to {}", lease.keys, lease.path)),
+        ),
+        Err(error) => (false, Some(error.message)),
+    }
+}
+
 /// Reads a destination without starting anything: what mode it is, which place
 /// it names, and which client would run it.
 #[tauri::command]
@@ -423,11 +463,12 @@ async fn launch_start(
     user_id: Option<u64>,
 ) -> Result<launch::Launched, LaunchError> {
     let root = state.data_root.clone();
-    let (pinned, multi) = {
+    let (pinned, multi, placement) = {
         let settings = state.settings.lock().map_err(|_| poisoned())?;
         (
             settings.supply.pinned.clone(),
             settings.launch.multi_instance,
+            settings.flags.placement,
         )
     };
 
@@ -507,8 +548,21 @@ async fn launch_start(
                 reused: true,
                 detail: "That launch is already starting, so no second client was opened."
                     .to_string(),
+                flags: None,
             });
         }
+
+        // Flags go in before the client starts, because the client reads the
+        // file once at boot. A failure here is reported and the launch goes
+        // ahead: a game with vanilla flags beats no game.
+        let (leashed, flag_note) = apply_flags_for(
+            &root,
+            placement,
+            &installed,
+            &pinned,
+            chosen,
+            prepared.place,
+        );
 
         let outcome = (|| {
             let ticket = launch::ticket::mint(&cookie)?;
@@ -517,11 +571,29 @@ async fn launch_start(
         })();
 
         match outcome {
-            Ok(_pid) => {
+            Ok(mut child) => {
                 launch::settle(&key);
                 // Recorded so "continue as" has an answer next time. A failure
                 // here must not turn a running client into an error.
                 let _ = identity::mark_used(&root, chosen);
+
+                if leashed {
+                    let data = root.clone();
+                    std::thread::spawn(move || {
+                        let _ = child.wait();
+                        // A second client may still be running, and it read the
+                        // same file at its own boot. The lease ends when the
+                        // last client does.
+                        for _ in 0..900 {
+                            if !launch::spawn::player_running() {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_secs(2));
+                        }
+                        let _ = flags::apply::revert(&data);
+                    });
+                }
+
                 Ok(launch::Launched {
                     mode,
                     mode_label: prepared.mode_label,
@@ -532,10 +604,16 @@ async fn launch_start(
                     version: prepared.version,
                     reused: false,
                     detail,
+                    flags: flag_note,
                 })
             }
             Err(error) => {
                 launch::release();
+                // A failure after the flags were written must not leave them
+                // behind for a session that never started.
+                if leashed {
+                    let _ = flags::apply::revert(&root);
+                }
                 Err(error)
             }
         }
@@ -613,6 +691,267 @@ fn launch_state(state: State<'_, AppState>) -> Result<LaunchState, LaunchError> 
         player_running: launch::spawn::player_running(),
         multi_instance,
     })
+}
+
+// ---- stage 05, flags ----
+
+/// Everything the flags drawer needs in one answer: the catalogue's age, the
+/// profiles, where a write would land, and any lease still in force.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FlagsView {
+    pub catalog: Option<flags::catalog::Catalog>,
+    pub store: flags::Store,
+    pub target: Option<flags::Target>,
+    pub lease: Option<flags::Lease>,
+    pub exports: Vec<flags::ExportFile>,
+    /// A flag file that was put back on this start because the last run did not
+    /// finish cleanly.
+    pub recovered: Option<String>,
+    pub placement: flags::Placement,
+    pub player_running: bool,
+}
+
+fn placement(state: &State<'_, AppState>) -> Result<flags::Placement, LaunchError> {
+    Ok(state
+        .settings
+        .lock()
+        .map_err(|_| poisoned())?
+        .flags
+        .placement)
+}
+
+fn installed_clients(
+    state: &State<'_, AppState>,
+) -> Result<(Vec<supply::InstalledClient>, Option<String>), LaunchError> {
+    let pinned = state
+        .settings
+        .lock()
+        .map_err(|_| poisoned())?
+        .supply
+        .pinned
+        .clone();
+    let installed = supply::discover_all(&pinned, None)?;
+    Ok((installed, pinned))
+}
+
+#[tauri::command]
+async fn flags_view(state: State<'_, AppState>) -> Result<FlagsView, LaunchError> {
+    let root = state.data_root.clone();
+    let chosen = placement(&state)?;
+    let (installed, pinned) = installed_clients(&state)?;
+    let recovered = state.recovered.lock().map_err(|_| poisoned())?.take();
+
+    Ok(FlagsView {
+        catalog: flags::catalog::load(&root),
+        store: flags::store::load(&root)?,
+        target: flags::target(chosen, &installed, &pinned).ok(),
+        lease: flags::apply::lease(&root),
+        exports: flags::exports(&root),
+        recovered,
+        placement: chosen,
+        player_running: launch::spawn::player_running(),
+    })
+}
+
+/// Fetches Roblox's own flag list. The catalogue is what the client itself
+/// reads, so a key's default here is the client's default.
+#[tauri::command]
+async fn flags_refresh(state: State<'_, AppState>) -> Result<flags::catalog::Catalog, LaunchError> {
+    let root = state.data_root.clone();
+    tauri::async_runtime::spawn_blocking(move || flags::catalog::refresh(&root))
+        .await
+        .map_err(|e| worker_failed(format!("The flag list was not refreshed: {e}")))?
+}
+
+#[tauri::command]
+fn flags_search(
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<flags::catalog::Hit>, LaunchError> {
+    let catalog = flags::catalog::load(&state.data_root).unwrap_or(flags::catalog::Catalog {
+        fetched: 0,
+        application: String::new(),
+        values: Default::default(),
+    });
+    Ok(flags::catalog::search(
+        &catalog,
+        &query,
+        limit.unwrap_or(40),
+    ))
+}
+
+/// Replaces one profile's whole flag set. The page sends the set it is showing,
+/// so what is saved is exactly what the person can see.
+#[tauri::command]
+fn flags_save_profile(
+    state: State<'_, AppState>,
+    name: String,
+    values: std::collections::BTreeMap<String, serde_json::Value>,
+) -> Result<flags::Store, LaunchError> {
+    for (key, value) in &values {
+        flags::store::check_value(key, value)?;
+    }
+
+    let mut store = flags::store::load(&state.data_root)?;
+    flags::store::upsert_profile(&mut store, &name, values)?;
+    flags::store::save(&state.data_root, &store)?;
+    Ok(store)
+}
+
+#[tauri::command]
+fn flags_delete_profile(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<flags::Store, LaunchError> {
+    let mut store = flags::store::load(&state.data_root)?;
+    flags::store::drop_profile(&mut store, &name);
+    flags::store::save(&state.data_root, &store)?;
+    Ok(store)
+}
+
+/// Sets one slot of the scope chain. `profile` of `None` clears that slot.
+#[tauri::command]
+fn flags_set_scope(
+    state: State<'_, AppState>,
+    slot: String,
+    id: Option<u64>,
+    profile: Option<String>,
+) -> Result<flags::Store, LaunchError> {
+    let mut store = flags::store::load(&state.data_root)?;
+
+    if let Some(name) = &profile {
+        if flags::store::profile_named(&store, name).is_none() {
+            return Err(LaunchError::new(
+                FailureCode::NotFound,
+                format!("There is no profile called {name}."),
+            ));
+        }
+    }
+
+    match slot.as_str() {
+        "global" => store.scopes.global = profile,
+        "account" => match (id, profile) {
+            (Some(id), Some(name)) => {
+                store.scopes.accounts.insert(id.to_string(), name);
+            }
+            (Some(id), None) => {
+                store.scopes.accounts.remove(&id.to_string());
+            }
+            _ => {
+                return Err(LaunchError::new(
+                    FailureCode::NotFound,
+                    "An account scope needs an account.",
+                ))
+            }
+        },
+        "game" => match (id, profile) {
+            (Some(id), Some(name)) => {
+                store.scopes.games.insert(id.to_string(), name);
+            }
+            (Some(id), None) => {
+                store.scopes.games.remove(&id.to_string());
+            }
+            _ => {
+                return Err(LaunchError::new(
+                    FailureCode::NotFound,
+                    "A game scope needs a place id.",
+                ))
+            }
+        },
+        other => {
+            return Err(LaunchError::new(
+                FailureCode::NotFound,
+                format!("There is no {other} scope."),
+            ))
+        }
+    }
+
+    flags::store::save(&state.data_root, &store)?;
+    Ok(store)
+}
+
+/// The resolved chain for one account and one place, with provenance per row.
+#[tauri::command]
+fn flags_resolve(
+    state: State<'_, AppState>,
+    account: Option<u64>,
+    place: Option<u64>,
+) -> Result<Vec<flags::Row>, LaunchError> {
+    let store = flags::store::load(&state.data_root)?;
+    Ok(flags::store::resolve(&store, account, place))
+}
+
+#[tauri::command]
+fn flags_place(
+    state: State<'_, AppState>,
+    placement: flags::Placement,
+) -> Result<Settings, LaunchError> {
+    let next = {
+        let mut settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.flags.placement = placement;
+        settings::normalise(settings.clone())
+    };
+    settings::save(&state.data_root, &next)?;
+    let mut guard = state.settings.lock().map_err(|_| poisoned())?;
+    *guard = next.clone();
+    Ok(next)
+}
+
+/// Writes the resolved flags now, outside a launch. A live client makes this a
+/// refusal, because the file is read at boot and would not reach that session.
+#[tauri::command]
+fn flags_apply(
+    state: State<'_, AppState>,
+    account: Option<u64>,
+    place: Option<u64>,
+) -> Result<flags::Lease, LaunchError> {
+    if launch::spawn::player_running() {
+        return Err(LaunchError::new(
+            FailureCode::AlreadyRunning,
+            "A client is running, and it read its flags when it started. Close it first.",
+        )
+        .with_action("Close Roblox"));
+    }
+
+    let store = flags::store::load(&state.data_root)?;
+    let rows = flags::store::resolve(&store, account, place);
+    if rows.is_empty() {
+        return Err(LaunchError::new(
+            FailureCode::NotFound,
+            "No profile sets any flag for that account and place, so there is nothing to write.",
+        )
+        .with_action("Add a flag"));
+    }
+
+    let chosen = placement(&state)?;
+    let (installed, pinned) = installed_clients(&state)?;
+    let target = flags::target(chosen, &installed, &pinned)?;
+    flags::apply::apply(&state.data_root, std::path::Path::new(&target.path), &rows)
+}
+
+#[tauri::command]
+fn flags_revert(state: State<'_, AppState>) -> Result<Option<String>, LaunchError> {
+    flags::apply::revert(&state.data_root)
+}
+
+#[tauri::command]
+fn flags_export(state: State<'_, AppState>, name: String) -> Result<String, LaunchError> {
+    let store = flags::store::load(&state.data_root)?;
+    let profile = flags::store::profile_named(&store, &name).ok_or_else(|| {
+        LaunchError::new(
+            FailureCode::NotFound,
+            format!("There is no profile called {name}."),
+        )
+    })?;
+    let file = flags::export(&state.data_root, profile)?;
+    Ok(file.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn flags_import(path: String) -> Result<flags::Imported, LaunchError> {
+    flags::import(std::path::Path::new(&path))
 }
 
 /// Opens the Roblox versions folder, so a person can see what the screen is
@@ -944,11 +1283,17 @@ pub fn run() {
                 None
             };
 
+            // A lease left behind means the last run ended before it could put
+            // the client's own settings back. Restoring here is what makes the
+            // crash path real rather than aspirational.
+            let recovered = flags::apply::revert(&root).ok().flatten();
+
             app.manage(AppState {
                 data_root: root,
                 settings: Mutex::new(loaded),
                 settings_error,
                 singleton: Mutex::new(singleton),
+                recovered: Mutex::new(recovered),
                 supply: SupplyState::default(),
                 opened,
             });
@@ -975,6 +1320,18 @@ pub fn run() {
             launch_start,
             launch_multi_instance,
             launch_state,
+            flags_view,
+            flags_refresh,
+            flags_search,
+            flags_save_profile,
+            flags_delete_profile,
+            flags_set_scope,
+            flags_resolve,
+            flags_place,
+            flags_apply,
+            flags_revert,
+            flags_export,
+            flags_import,
             window_open,
             window_grow,
             supply_snapshot,

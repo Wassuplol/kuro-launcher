@@ -3,6 +3,13 @@ import type {
   AccountView,
   AppInfo,
   ClientKind,
+  FlagsView,
+  FlagCatalog,
+  FlagHit,
+  FlagLease,
+  FlagRow,
+  FlagStore,
+  ImportedFlags,
   InstallMethod,
   Launched,
   LaunchReading,
@@ -124,6 +131,25 @@ export const api = {
   launchMultiInstance: (enabled: boolean) =>
     call<MultiInstance>("launch_multi_instance", { enabled }),
   launchState: () => call<LaunchState>("launch_state"),
+
+  flagsView: () => call<FlagsView>("flags_view"),
+  flagsRefresh: () => call<FlagCatalog>("flags_refresh"),
+  flagsSearch: (query: string, limit?: number) =>
+    call<FlagHit[]>("flags_search", { query, limit }),
+  flagsSaveProfile: (name: string, values: Record<string, unknown>) =>
+    call<FlagStore>("flags_save_profile", { name, values }),
+  flagsDeleteProfile: (name: string) => call<FlagStore>("flags_delete_profile", { name }),
+  flagsSetScope: (slot: "global" | "account" | "game", id: number | null, profile: string | null) =>
+    call<FlagStore>("flags_set_scope", { slot, id, profile }),
+  flagsResolve: (account: number | null, place: number | null) =>
+    call<FlagRow[]>("flags_resolve", { account, place }),
+  flagsPlace: (placement: "user" | "version") =>
+    call<Settings>("flags_place", { placement }),
+  flagsApply: (account: number | null, place: number | null) =>
+    call<FlagLease>("flags_apply", { account, place }),
+  flagsRevert: () => call<string | null>("flags_revert"),
+  flagsExport: (name: string) => call<string>("flags_export", { name }),
+  flagsImport: (path: string) => call<ImportedFlags>("flags_import", { path }),
 
   /** Shrinks and shows the window at the opening scene's size. */
   windowOpen: (width: number, height: number) =>

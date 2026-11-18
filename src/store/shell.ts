@@ -16,6 +16,7 @@ type ShellState = {
   versionsOpen: boolean;
   accountsOpen: boolean;
   launchOpen: boolean;
+  flagsOpen: boolean;
   onboardingOpen: boolean;
 
   boot: () => Promise<void>;
@@ -30,6 +31,8 @@ type ShellState = {
   closeAccounts: () => void;
   openLaunch: () => void;
   closeLaunch: () => void;
+  openFlags: () => void;
+  closeFlags: () => void;
   openOnboarding: () => void;
   closeOnboarding: () => void;
   setMultiInstance: (enabled: boolean) => Promise<void>;
@@ -49,6 +52,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   versionsOpen: false,
   accountsOpen: false,
   launchOpen: false,
+  flagsOpen: false,
   onboardingOpen: false,
 
   boot: async () => {
@@ -85,7 +89,13 @@ export const useShell = create<ShellState>()((set, get) => ({
   openPalette: () => set({ paletteOpen: true }),
   closePalette: () => set({ paletteOpen: false }),
   openSettings: () =>
-    set({ settingsOpen: true, versionsOpen: false, accountsOpen: false, launchOpen: false }),
+    set({
+      settingsOpen: true,
+      versionsOpen: false,
+      accountsOpen: false,
+      launchOpen: false,
+      flagsOpen: false,
+    }),
   closeSettings: () => set({ settingsOpen: false }),
   openVersions: () =>
     set({
@@ -114,6 +124,16 @@ export const useShell = create<ShellState>()((set, get) => ({
       accountsOpen: false,
     }),
   closeLaunch: () => set({ launchOpen: false }),
+  openFlags: () =>
+    set({
+      flagsOpen: true,
+      settingsOpen: false,
+      paletteOpen: false,
+      versionsOpen: false,
+      accountsOpen: false,
+      launchOpen: false,
+    }),
+  closeFlags: () => set({ flagsOpen: false }),
   openOnboarding: () => set({ onboardingOpen: true, settingsOpen: false, paletteOpen: false }),
   closeOnboarding: () => set({ onboardingOpen: false }),
 
