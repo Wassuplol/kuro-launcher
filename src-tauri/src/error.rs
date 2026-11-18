@@ -26,8 +26,9 @@ pub enum FailureCode {
     ConfigUnwritable,
     /// A command asked for something that is not there.
     NotFound,
-    /// A channel the version service will not answer without a signed-in
-    /// session. Measured, not assumed: zcanary and zintegration refuse.
+    /// A channel the version service will not answer. Measured twice, on
+    /// 2026-11-17 anonymously and on 2026-11-18 with a live session: zcanary,
+    /// zintegration and zflag answer 401 code 5 either way.
     ChannelUnavailable,
     /// The person asked for the work to stop, and it stopped.
     Cancelled,

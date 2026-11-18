@@ -61,13 +61,15 @@ impl Kind {
     }
 }
 
-/// One channel, and whether this app can read it without a signed-in session.
+/// One channel, and whether this app can read it at all.
 ///
-/// Measured on 2026-11-17: `channel/LIVE` answers anonymously, while zcanary
-/// and zintegration answer `{"errors":[{"code":5,"message":"Not authorized to
-/// perform this action."}]}`. The brief assumes all three are readable; they
-/// are not, so the two that refuse are listed with the reason instead of being
-/// offered and failing later.
+/// Measured, twice. On 2026-11-17: `channel/LIVE` answers anonymously, while
+/// zcanary, zintegration and zflag answer `{"errors":[{"code":5,"message":"Not
+/// authorized to perform this action."}]}`. On 2026-11-18 the same three were
+/// asked again with a live session attached (the same `.ROBLOSECURITY` header the
+/// app builds, proved live first by `users/v1/users/authenticated` answering
+/// MemoLe): still 401 code 5. So a session buys nothing here, and the note says
+/// that instead of promising that signing in would open them.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Channel {
@@ -78,6 +80,9 @@ pub struct Channel {
 }
 
 pub fn channels() -> Vec<Channel> {
+    let refusal = || {
+        Some("Roblox refuses this channel to every account, a live session included. Internal builds only.".to_string())
+    };
     vec![
         Channel {
             id: "LIVE".into(),
@@ -89,13 +94,13 @@ pub fn channels() -> Vec<Channel> {
             id: "zcanary".into(),
             label: "zcanary".into(),
             available: false,
-            note: Some("Roblox only answers this channel for a signed-in session.".into()),
+            note: refusal(),
         },
         Channel {
             id: "zintegration".into(),
             label: "zintegration".into(),
             available: false,
-            note: Some("Roblox only answers this channel for a signed-in session.".into()),
+            note: refusal(),
         },
     ]
 }
