@@ -5,7 +5,7 @@ import { AssistantSection } from "./AssistantSection";
 import { Toggle } from "../components/Toggle";
 import { api } from "../lib/ipc";
 import { cn } from "../lib/cn";
-import type { Intent, LinkState } from "../lib/types";
+import type { Intent, LinkState, PresenceView } from "../lib/types";
 import { useShell } from "../store/shell";
 
 const GENRES = [
@@ -37,12 +37,62 @@ export function SettingsPanel() {
   const go = useShell((state) => state.go);
   const bootFailed = useShell((state) => state.bootFailed);
 
+  const [link, setLink] = useState<LinkState | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [presence, setPresence] = useState<PresenceView | null>(null);
+  const [appId, setAppId] = useState("");
+  const [presenceBusy, setPresenceBusy] = useState(false);
+
   useEffect(() => {
     void api
       .linkState()
       .then(setLink)
       .catch(() => setLink(null));
   }, []);
+
+  useEffect(() => {
+    void api
+      .presenceView()
+      .then((view) => {
+        setPresence(view);
+        setAppId(view.appId);
+      })
+      .catch(() => setPresence(null));
+  }, []);
+
+  const savePresence = async (enabled: boolean, id: string) => {
+    setPresenceBusy(true);
+    try {
+      const view = await api.presenceSave(enabled, id);
+      setPresence(view);
+      setAppId(view.appId);
+    } catch (value) {
+      // The row keeps its last known state; the message says what was wrong with the id.
+      setPresence((current) =>
+        current
+          ? {
+              ...current,
+              status: {
+                ...current.status,
+                error: value instanceof Error ? value.message : String(value),
+              },
+            }
+          : current,
+      );
+    } finally {
+      setPresenceBusy(false);
+    }
+  };
+
+  const presenceLine = (() => {
+    if (!presence) return "Reading Discord's connection.";
+    if (!presence.enabled) return "Off. Nothing is sent to Discord.";
+    if (!presence.discordRunning) return "On, but Discord is not running right now.";
+    if (presence.status.error) return presence.status.error;
+    if (presence.status.connected && presence.status.line) return `Showing: ${presence.status.line}`;
+    if (presence.status.connected) return "Connected, waiting for a session.";
+    return "On. Looking for Discord.";
+  })();
 
   const toggleLink = async () => {
     setLinkBusy(true);
@@ -57,8 +107,6 @@ export function SettingsPanel() {
 
   const [name, setName] = useState(settings?.identity.name ?? "");
   const [confirming, setConfirming] = useState(false);
-  const [link, setLink] = useState<LinkState | null>(null);
-  const [linkBusy, setLinkBusy] = useState(false);
 
   useEffect(() => {
     setName(settings?.identity.name ?? "");
@@ -303,6 +351,50 @@ export function SettingsPanel() {
                 this build.
               </p>
             ) : null}
+          </Section>
+
+          <Section title="Discord">
+            <Row
+              label="Show what I am playing"
+              hint="Presence on your Discord profile, read from the same log the Sessions page reads. Off unless you turn it on, and nothing goes anywhere but Discord on this machine."
+            >
+              <Toggle
+                label="Show what I am playing in Discord"
+                checked={presence?.enabled ?? false}
+                onCheckedChange={(checked) => void savePresence(checked, appId)}
+              />
+            </Row>
+
+            <div className="px-3.5 py-2.5">
+              <label htmlFor="discord-app" className="text-[11px] text-muted">
+                Application id
+              </label>
+              <p className="mt-0.5 text-[11px] leading-[1.55] text-muted">
+                The number from discord.com/developers under General Information. It decides the
+                name and the icon on the card, so it has to be an application you made.
+              </p>
+              <div className="mt-2 flex gap-1.5">
+                <input
+                  id="discord-app"
+                  value={appId}
+                  onChange={(event) => setAppId(event.target.value)}
+                  placeholder="1234567890123456789"
+                  autoComplete="off"
+                  spellCheck={false}
+                  inputMode="numeric"
+                  className="ui h-8 min-w-0 flex-1 rounded-control border border-white/10 bg-raised px-2.5 font-mono text-[12px] text-body placeholder:text-muted focus:border-gold/60 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => void savePresence(presence?.enabled ?? false, appId)}
+                  disabled={presenceBusy}
+                  className="ui h-8 shrink-0 rounded-control border border-white/10 px-2.5 text-[12px] text-body hover:border-white/20 hover:bg-white/5 disabled:opacity-50"
+                >
+                  {presenceBusy ? "Saving" : "Save"}
+                </button>
+              </div>
+              <p className="mt-2 text-[11px] leading-[1.55] text-body">{presenceLine}</p>
+            </div>
           </Section>
 
           <Section title="Advanced">

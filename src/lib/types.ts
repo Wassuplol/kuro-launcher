@@ -17,6 +17,7 @@ export type Settings = {
   intro: { instantStart: boolean };
   supply: { pinned: string | null };
   launch: { multiInstance: boolean; gpuPin: boolean };
+  discord: { enabled: boolean; appId: string };
   advanced: boolean;
 };
 
@@ -211,6 +212,19 @@ export type LaunchTile = {
   /** Unix seconds of the last launch, and how many times it has run. */
   at: number;
   used: number;
+};
+
+/** What the settings row says about Discord presence. */
+export type PresenceView = {
+  enabled: boolean;
+  appId: string;
+  status: {
+    connected: boolean;
+    /** What a friend would see right now. */
+    line: string | null;
+    error: string | null;
+  };
+  discordRunning: boolean;
 };
 
 /** What a `kuro://` link carries. Every field can be missing: a link is text from outside. */

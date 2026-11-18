@@ -9,6 +9,7 @@ pub mod launch;
 pub mod ledger;
 pub mod library;
 pub mod links;
+pub mod presence;
 pub mod profiles;
 pub mod receipts;
 pub mod settings;
@@ -46,6 +47,9 @@ pub struct AppState {
     /// The per-class request allowance and the answers kept between paints.
     pub budget: std::sync::Arc<discovery::Budget>,
     pub cache: std::sync::Arc<discovery::Cache>,
+    /// What Discord is being told right now, written by the presence thread and read by
+    /// the settings row.
+    pub presence: Mutex<presence::Status>,
     /// A `kuro://` link waiting to be read by the page. Windows hands one over as a
     /// command-line argument, and a second launch hands it to the running process.
     pub pending_link: Mutex<Option<links::Party>>,
@@ -892,6 +896,67 @@ fn link_for(place: Option<u64>, server: Option<String>, account: Option<u64>) ->
         server,
         account,
     })
+}
+
+// ---- Discord presence ----
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresenceView {
+    pub enabled: bool,
+    pub app_id: String,
+    pub status: presence::Status,
+    /// Discord is running right now, so a connection has somewhere to go.
+    pub discord_running: bool,
+}
+
+fn presence_view_now(state: &AppState) -> Result<PresenceView, LaunchError> {
+    let (enabled, app_id) = {
+        let settings = state.settings.lock().map_err(|_| poisoned())?;
+        (settings.discord.enabled, settings.discord.app_id.clone())
+    };
+    let status = state.presence.lock().map_err(|_| poisoned())?.clone();
+
+    Ok(PresenceView {
+        enabled,
+        app_id,
+        status,
+        discord_running: presence::discord_running(),
+    })
+}
+
+#[tauri::command]
+fn presence_view(state: State<'_, AppState>) -> Result<PresenceView, LaunchError> {
+    presence_view_now(&state)
+}
+
+/// Turns presence on or off and remembers the application id.
+///
+/// The id is checked before it is stored, because the failure it prevents is invisible:
+/// a wrong id looks like "presence does not work" rather than "that is a client secret".
+#[tauri::command]
+fn presence_save(
+    state: State<'_, AppState>,
+    enabled: bool,
+    app_id: String,
+) -> Result<PresenceView, LaunchError> {
+    presence::check_app_id(&app_id)?;
+
+    let next = {
+        let mut settings = state.settings.lock().map_err(|_| poisoned())?;
+        settings.discord.enabled = enabled;
+        settings.discord.app_id = app_id.trim().to_string();
+        settings::normalise(settings.clone())
+    };
+    settings::save(&state.data_root, &next)?;
+    *state.settings.lock().map_err(|_| poisoned())? = next;
+
+    // The row should not keep a stale sentence from the last configuration.
+    if let Ok(mut status) = state.presence.lock() {
+        *status = presence::Status::default();
+    }
+
+    presence_view_now(&state)
 }
 
 /// Turns the multi-instance lock on or off and remembers the answer.
@@ -2210,11 +2275,16 @@ pub fn run() {
                 recovered: Mutex::new(recovered),
                 supply: SupplyState::default(),
                 pending_link: Mutex::new(pending_link),
+                presence: Mutex::new(presence::Status::default()),
                 budget: std::sync::Arc::new(discovery::Budget::default()),
                 cache: std::sync::Arc::new(discovery::Cache::default()),
                 opened,
                 cancel: std::sync::Arc::new(AtomicBool::new(false)),
             });
+            // Presence is one connection and one socket, so it is one thread. It reads the
+            // settings each tick, which is why switching it off needs no message.
+            presence::spawn(app.handle().clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -2243,6 +2313,8 @@ pub fn run() {
             link_unregister,
             link_take,
             link_for,
+            presence_view,
+            presence_save,
             profiles_list,
             profiles_save,
             profiles_delete,

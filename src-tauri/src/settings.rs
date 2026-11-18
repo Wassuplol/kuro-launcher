@@ -68,6 +68,18 @@ impl Default for Launching {
     }
 }
 
+/// What Discord is allowed to be told.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Discord {
+    /// Off by default: telling Discord what someone is playing is their decision, not
+    /// this app's.
+    pub enabled: bool,
+    /// The application whose name and icon appear on the card. Empty until the person
+    /// makes one, and presence stays quiet until then rather than borrowing a name.
+    pub app_id: String,
+}
+
 /// The assistant's connection. The key is stored **sealed** with DPAPI, the same
 /// way a session cookie is, and is never returned to the page: the screen only ever
 /// learns whether one is set.
@@ -90,6 +102,7 @@ pub struct Settings {
     pub intro: Intro,
     pub supply: Supply,
     pub launch: Launching,
+    pub discord: Discord,
     pub assistant: Assistant,
     pub advanced: bool,
 }
@@ -102,6 +115,7 @@ impl Default for Settings {
             intro: Intro::default(),
             supply: Supply::default(),
             launch: Launching::default(),
+            discord: Discord::default(),
             assistant: Assistant::default(),
             advanced: false,
         }

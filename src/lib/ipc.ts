@@ -30,6 +30,7 @@ import type {
   MultiInstance,
   Party,
   PlayLog,
+  PresenceView,
   Played,
   PrunePlan,
   PruneResult,
@@ -157,6 +158,11 @@ export const api = {
   tileSave: (profile: LaunchTile) => call<LaunchTile[]>("profiles_save", { profile }),
   tileDelete: (id: string) => call<LaunchTile[]>("profiles_delete", { id }),
   tileLaunch: (id: string) => call<Launched>("profiles_launch", { id }),
+
+  /** Whether Discord is being told anything, and what it would show. */
+  presenceView: () => call<PresenceView>("presence_view"),
+  presenceSave: (enabled: boolean, appId: string) =>
+    call<PresenceView>("presence_save", { enabled, appId }),
 
   /** Where `kuro://` points right now, and whether that is this build. */
   linkState: () => call<LinkState>("link_state"),
