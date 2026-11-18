@@ -26,6 +26,7 @@ import type {
   Played,
   PrunePlan,
   PruneResult,
+  Receipt,
   Roster,
   QuickLoginAttempt,
   QuickLoginPoll,
@@ -157,6 +158,14 @@ export const api = {
   libraryRecent: () => call<PlayLog>("library_recent"),
   libraryRecord: (entry: Omit<Played, "at">) => call<PlayLog>("library_record", { entry }),
   libraryClear: () => call<PlayLog>("library_clear"),
+
+  /** Every client launch this machine still has a log for, newest first. */
+  receiptsScan: () => call<Receipt[]>("receipts_scan"),
+  /** Place ids to names, best effort, cached on disk after the first answer. */
+  receiptNames: (places: number[]) =>
+    call<Record<string, string>>("receipts_names", { places }),
+  /** Opens one client log in whatever the machine uses for .log files. */
+  receiptsOpen: (path: string) => call<void>("receipts_open", { path }),
 
   /** The friend list with names, faces and live presence. Needs an account. */
   friendsRoster: () => call<Roster>("friends_roster"),

@@ -41,6 +41,22 @@ export function day(unix: number): string {
   });
 }
 
+/** "6m 41s", "1h 12m", "48s". Rounded, never two units of noise. */
+export function span(seconds: number): string {
+  if (seconds >= 3600) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+  }
+  if (seconds >= 60) return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
+  return `${Math.max(0, Math.round(seconds))}s`;
+}
+
+/** "18 Nov, 16:13": the day matters more than the year on a list of launches. */
+export function stamp(unix: number): string {
+  return `${day(unix)}, ${clock(unix)}`;
+}
+
 /** "3 minutes ago", for things whose exact timestamp nobody reads. */
 export function ago(unix: number, now: number = Date.now()): string {
   if (!unix) return "never";

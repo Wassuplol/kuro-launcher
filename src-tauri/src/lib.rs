@@ -6,6 +6,7 @@ pub mod http;
 pub mod identity;
 pub mod launch;
 pub mod library;
+pub mod receipts;
 pub mod settings;
 pub mod social;
 pub mod supply;
@@ -1064,6 +1065,68 @@ fn library_clear(state: State<'_, AppState>) -> Result<library::Log, LaunchError
     library::clear(&state.data_root)
 }
 
+/// Every client launch this machine still has a log for, newest first.
+///
+/// The logs are Roblox's, the reading is ours: see `receipts` for which lines carry
+/// the facts and which do not exist in a log at all.
+#[tauri::command]
+fn receipts_scan(state: State<'_, AppState>) -> Result<Vec<receipts::Receipt>, LaunchError> {
+    receipts::scan(&state.data_root)
+}
+
+/// Resolves place ids to names for the Sessions page, and remembers every answer.
+///
+/// Best effort: the page works without it, and a refusal from Roblox leaves the row
+/// showing the id rather than an error nobody can act on.
+#[tauri::command]
+fn receipts_names(
+    state: State<'_, AppState>,
+    places: Vec<u64>,
+) -> std::collections::HashMap<u64, String> {
+    receipts::names(&state.data_root, &places)
+}
+
+/// Opens one client log in whatever the machine uses for `.log` files.
+///
+/// The page supplies the path, so it is checked rather than trusted: it has to
+/// resolve inside Roblox's own log folder and end in `.log`. A reader that opens
+/// any path the front end names is a reader that opens anything.
+#[tauri::command]
+fn receipts_open(path: String) -> Result<(), LaunchError> {
+    let file = std::path::PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| {
+            LaunchError::new(
+                FailureCode::NotFound,
+                format!("That log is not there any more: {e}"),
+            )
+        })?;
+
+    let dir = receipts::logs_dir()
+        .and_then(|dir| dir.canonicalize().ok())
+        .ok_or_else(|| {
+            LaunchError::new(FailureCode::NotFound, "Roblox's log folder was not found.")
+        })?;
+
+    if !file.starts_with(&dir) || file.extension().and_then(|ext| ext.to_str()) != Some("log") {
+        return Err(LaunchError::new(
+            FailureCode::NotFound,
+            "That path is not a client log.",
+        ));
+    }
+
+    std::process::Command::new("explorer")
+        .arg(&file)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| {
+            LaunchError::new(
+                FailureCode::Internal,
+                format!("The log could not be opened: {e}"),
+            )
+        })
+}
+
 /// The friend list with names, faces and live presence.
 ///
 /// Needs the session for the list itself; presence is anonymous. The list is cached
@@ -1627,6 +1690,9 @@ pub fn run() {
             library_recent,
             library_record,
             library_clear,
+            receipts_scan,
+            receipts_names,
+            receipts_open,
             friends_roster,
             assistant_config,
             assistant_models,

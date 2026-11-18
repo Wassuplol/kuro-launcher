@@ -41,6 +41,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | **Search** | Games and people from Roblox's index, one deliberate query at a time |
 | **Game page** | Description, visits, rating, max players, and the public server list on a tab |
 | **Library** | The games the account has starred, paged and filterable, and this machine's own record of what it launched |
+| **Sessions** | Every launch this machine still has a log for, read from the client's own file: where it went, how long it lasted, and what it said when it stopped |
 | **Friends** | The account's friends with live presence, and a Join that lands in the exact server a friend is in |
 | **Assistant** | A pane docked beside the page, streamed as it writes. It reads the current screen, the saved accounts and what is running, proposes one action at a time, and never starts anything itself |
 | **Accounts** | Quick Login (six-character code or QR), cookie import, DPAPI vault, session health, forget, default |
@@ -56,6 +57,10 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 
 <p align="center">
   <img src="assets/library.webp" alt="The Library: the account's starred games, and the launches this machine started" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/sessions.webp" alt="The Sessions page: every launch this machine has a log for, and what the client wrote down when it stopped" width="100%">
 </p>
 
 <p align="center">
@@ -125,11 +130,12 @@ src-tauri/src/
   supply/      install roots, the package manifest, direct install, verify, prune
   flags/       the catalogue, profiles, scopes, the allowlist, the lease
   library.rs   this machine's own record of what it launched
+  receipts.rs  what the client logged about each launch, and why it stopped
   social.rs    the friend list, names, faces and live presence
   assistant.rs the forwarded conversation: resolved config, SSE streaming, the prompt
   error.rs     every failure has a code, a cause and an action
 src/
-  screens/     Home, Search, Game, Launch, Accounts, Flags, Versions, Library, Friends
+  screens/     Home, Search, Game, Launch, Accounts, Flags, Versions, Library, Friends, Sessions
   panels/      the bodies of those pages, plus the palette and settings drawers
   store/       zustand: shell, accounts, versions, flags, discovery, library
 tools/

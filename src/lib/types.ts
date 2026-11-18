@@ -435,3 +435,36 @@ export type AssistantFinished = {
   ms: number;
   chars: number;
 };
+
+/**
+ * One launch, as the client's own log recorded it. Every field is either written by
+ * the client or absent; nothing here is inferred from the website.
+ */
+export type Receipt = {
+  id: string;
+  version: string;
+  /** Unix seconds, from the stamp in the log file name. */
+  started: number;
+  /** How long the client was alive, from the log's own clock. */
+  seconds: number;
+  place: number | null;
+  /** Filled from this app's own history when it knows the place. */
+  name: string | null;
+  universe: number | null;
+  job: string | null;
+  server: string | null;
+  joinSeconds: number | null;
+  handshake: boolean;
+  adapter: string | null;
+  api: string | null;
+  vramMb: number | null;
+  shutdownStage: string | null;
+  httpErrors: number;
+  lastHttp: string | null;
+  outcome: "left" | "ended" | "no_handshake" | "never_joined" | "crashed";
+  verdict: string;
+  action: string | null;
+  lines: number;
+  bytes: number;
+  logPath: string;
+};

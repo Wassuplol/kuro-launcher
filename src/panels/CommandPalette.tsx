@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Command } from "cmdk";
-import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, Home, Library, MessagesSquare, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, History, Home, Library, MessagesSquare, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users } from "lucide-react";
 import { motion } from "motion/react";
 
 import { PAGE_LABEL, PAGES } from "../app/router";
@@ -11,6 +11,7 @@ const ICONS = {
   home: Home,
   search: Search,
   library: Library,
+  sessions: History,
   friends: Users,
   launch: Play,
   accounts: UserRound,
@@ -27,6 +28,7 @@ const KEYWORDS: Record<(typeof PAGES)[number], string> = {
   home: "start overview",
   search: "find games people",
   library: "saved shelf",
+  sessions: "logs receipts history crash why did it crash session record",
   friends: "social presence",
   launch: "play join game place server private invite",
   accounts: "sign in cookie session add account",

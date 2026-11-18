@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useHotkeys } from "react-hotkeys-hook";
 import {
+  History,
   Home,
   Library,
   MessagesSquare,
@@ -33,6 +34,7 @@ import { HomeScreen } from "../screens/Home";
 import { LaunchScreen } from "../screens/Launch";
 import { LibraryScreen } from "../screens/Library";
 import { SearchScreen } from "../screens/Search";
+import { SessionsScreen } from "../screens/Sessions";
 import { VersionsScreen } from "../screens/Versions";
 
 const win = getCurrentWindow();
@@ -41,6 +43,7 @@ const RAIL: { page: Page; icon: typeof Home; shortcut: string }[] = [
   { page: "home", icon: Home, shortcut: "Ctrl 1" },
   { page: "search", icon: Search, shortcut: "Ctrl 2" },
   { page: "library", icon: Library, shortcut: "Ctrl 3" },
+  { page: "sessions", icon: History, shortcut: "Ctrl 0" },
   { page: "friends", icon: Users, shortcut: "Ctrl 4" },
 ];
 
@@ -60,6 +63,7 @@ const SCREENS: Record<Page, ComponentType> = {
   home: HomeScreen,
   search: SearchScreen,
   library: LibraryScreen,
+  sessions: SessionsScreen,
   friends: FriendsScreen,
   launch: LaunchScreen,
   accounts: AccountsScreen,
@@ -224,6 +228,7 @@ export function Shell() {
   useHotkeys("ctrl+1", () => go("home"), { preventDefault: true });
   useHotkeys("ctrl+2", () => go("search"), { preventDefault: true });
   useHotkeys("ctrl+3", () => go("library"), { preventDefault: true });
+  useHotkeys("ctrl+0", () => go("sessions"), { preventDefault: true });
   useHotkeys("ctrl+4", () => go("friends"), { preventDefault: true });
   useHotkeys("ctrl+5", () => go("launch"), { preventDefault: true });
   useHotkeys("ctrl+6", () => go("accounts"), { preventDefault: true });
