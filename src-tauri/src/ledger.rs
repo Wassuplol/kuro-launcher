@@ -156,7 +156,7 @@ pub fn absorb(root: &Path, receipts: &[Receipt]) -> Result<usize, LaunchError> {
     }
 
     if added > 0 || changed {
-        store.entries.sort_by(|a, b| a.started.cmp(&b.started));
+        store.entries.sort_by_key(|entry| entry.started);
         // Oldest out first: a ledger is a record of what happened, and a session from
         // three years ago is the one to lose if one has to go.
         if store.entries.len() > LIMIT {
