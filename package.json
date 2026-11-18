@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "layout": "node tools/page-layout.mjs"
   },
   "dependencies": {
     "@radix-ui/react-switch": "^1.4.1",

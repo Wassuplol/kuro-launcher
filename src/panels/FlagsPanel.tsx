@@ -66,12 +66,10 @@ export function FlagsBody() {
       <Profiles />
       <Scopes account={accounts ?? []} />
 
-      {/* The primary action stays on screen while the rest scrolls: a drawer
-          taller than the window must not hide the one button that writes. */}
-      <div className="sticky bottom-0 z-10 -mx-5 mt-2 bg-panel px-5 pb-3">
-        <Write />
-      </div>
-      <div className="h-2" aria-hidden />
+      {/* A section like every other one. This used to be a sticky footer inside
+          a drawer; as a page it pinned itself over the sections above and hid
+          the profile rows it was floating above. */}
+      <Write />
     </>
   );
 }

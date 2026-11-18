@@ -1,0 +1,260 @@
+// Page layout check: the geometry a screenshot cannot be trusted to show.
+//
+// Run it against a build that has the debug port:
+//   node tools/page-layout.mjs
+//
+// Every page is measured the same way: the scroll container's content column is
+// found, its direct children are the stacked blocks, and four things are
+// asserted.
+//
+//   overlap    no two blocks intersect. A drawer-era `sticky` footer left behind
+//              when a panel became a page shows up here, and nowhere else: it
+//              looks correct until the page is tall enough to scroll.
+//   pinned     nothing inside `main` is `sticky`, `absolute` or `fixed`. On a page
+//              those are almost always something that used to float over a drawer.
+//   escaped    no block starts left of the column or ends right of it, which is
+//              what a leftover `-mx-5` does.
+//   tiny       no control under 16px in either direction.
+//
+// Exit code 1 on any failure, with the page and the numbers that failed. The
+// route is set by hash plus reload, because the hash is an output of the shell's
+// route rather than an input to it.
+
+import { readFileSync } from "node:fs";
+
+const PORT = process.env.KURO_CDP_PORT ?? "9333";
+const BASE = `http://127.0.0.1:${PORT}`;
+
+const router = readFileSync(new URL("../src/app/router.ts", import.meta.url), "utf8");
+const PAGES = [...router.matchAll(/^\s+"([a-z]+)",$/gm)].map((match) => match[1]);
+
+// The rail says "Launch a place" and "Roblox versions", so the label has to come
+// from the same table the rail reads rather than from the route id.
+const LABELS = Object.fromEntries(
+  [...router.matchAll(/^\s+([a-z]+):\s+"([^"]+)",$/gm)].map((match) => [match[1], match[2]]),
+);
+
+async function pageSocket() {
+  const response = await fetch(`${BASE}/json/list`);
+  const targets = await response.json();
+  const page = targets.find((target) => target.type === "page");
+  if (!page) throw new Error("no page target; is the launcher running with the debug port?");
+  return page.webSocketDebuggerUrl;
+}
+
+function connect(url) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url);
+    let counter = 0;
+    const pending = new Map();
+
+    socket.addEventListener("open", () => {
+      resolve({
+        send(method, params = {}) {
+          const id = ++counter;
+          socket.send(JSON.stringify({ id, method, params }));
+          return new Promise((res, rej) => pending.set(id, { res, rej }));
+        },
+        close() {
+          socket.close();
+        },
+      });
+    });
+
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      const slot = pending.get(message.id);
+      if (!slot) return;
+      pending.delete(message.id);
+      if (message.error) slot.rej(new Error(message.error.message));
+      else slot.res(message.result);
+    });
+
+    socket.addEventListener("error", () => reject(new Error("cdp socket error")));
+  });
+}
+
+const probe = `(() => {
+  const main = document.querySelector("main");
+  if (!main) return { error: "no main element" };
+
+  const scroller = [...main.querySelectorAll("div")].find(
+    (el) => getComputedStyle(el).overflowY === "auto" || getComputedStyle(el).overflowY === "scroll",
+  );
+  const column = scroller?.firstElementChild;
+  if (!column) return { error: "no content column" };
+
+  const blocks = [...column.children]
+    .filter((el) => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      return style.display !== "none" && box.height > 0;
+    })
+    .map((el) => {
+      const box = el.getBoundingClientRect();
+      return {
+        title: (el.querySelector("h2, h1")?.textContent ?? el.textContent ?? "?").trim().slice(0, 28),
+        top: Math.round(box.top),
+        bottom: Math.round(box.bottom),
+        left: Math.round(box.left),
+        right: Math.round(box.right),
+      };
+    });
+
+  const pinned = [...main.querySelectorAll("*")]
+    .filter((el) => {
+      const position = getComputedStyle(el).position;
+      return position === "sticky" || position === "absolute" || position === "fixed";
+    })
+    .map((el) => el.tagName.toLowerCase() + " " + String(el.className).slice(0, 48));
+
+  const tiny = [...main.querySelectorAll("button")]
+    .map((el) => {
+      const box = el.getBoundingClientRect();
+      return { label: (el.textContent ?? "").trim().slice(0, 20), w: Math.round(box.width), h: Math.round(box.height) };
+    })
+    .filter((button) => button.w > 0 && (button.w < 16 || button.h < 16));
+
+  const columnBox = column.getBoundingClientRect();
+
+  return {
+    heading: document.querySelector("main h1")?.textContent?.trim() ?? "",
+    framed: String(column.className).includes("max-w-"),
+    blocks,
+    pinned,
+    tiny,
+    column: { left: Math.round(columnBox.left), right: Math.round(columnBox.right) },
+  };
+})()`;
+
+const session = await connect(await pageSocket());
+const failures = [];
+
+async function evaluate(expression) {
+  const result = await session.send("Runtime.evaluate", {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  if (result.exceptionDetails) {
+    throw new Error(JSON.stringify(result.exceptionDetails.exception ?? {}));
+  }
+  return result.result.value;
+}
+
+/**
+ * Waits for the reload to finish and for the geometry to stop moving.
+ *
+ * Counting DOM nodes is not enough: the shell slides the content in, so the node
+ * count is already final while the column is still 200px to the left. Measuring
+ * during that window produces overlaps that do not exist, which is the same class
+ * of mistake as believing a screenshot.
+ */
+async function settle() {
+  let previous = null;
+  let empty = 0;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const ready = await evaluate(
+      `document.readyState === "complete" && Boolean(document.querySelector("main"))`,
+    );
+    if (!ready) continue;
+
+    const shape = await evaluate(`(() => {
+      const main = document.querySelector("main");
+      if (!main) return null;
+      const scroller = [...main.querySelectorAll("div")].find(
+        (el) => getComputedStyle(el).overflowY === "auto" || getComputedStyle(el).overflowY === "scroll",
+      );
+      const column = scroller?.firstElementChild;
+      if (!column) return null;
+      const box = column.getBoundingClientRect();
+      return [Math.round(box.left), Math.round(box.width), scroller.scrollHeight];
+    })()`);
+
+    // A page with no scroller (Search, Library and Friends are still centred
+    // empty states) has no column to wait for. Three looks and it is done.
+    if (!shape) {
+      empty += 1;
+      if (empty >= 3) return;
+      continue;
+    }
+    empty = 0;
+
+    if (previous && shape.every((value, i) => value === previous[i])) return;
+    previous = shape;
+  }
+  throw new Error("the page never settled");
+}
+
+const label = (page) => LABELS[page] ?? page;
+
+for (const page of PAGES) {
+  // Clicking the rail navigates in place. A hash plus reload would replay the
+  // opening splash, which resizes the window mid-measurement.
+  // The rail words are longer than the route names on purpose: "Launch a place",
+  // "Roblox versions". Match exactly first, then by prefix, then by containment.
+  const clicked = await evaluate(`(() => {
+    const wanted = ${JSON.stringify(label(page))}.toLowerCase();
+    const candidates = [...document.querySelectorAll("button[aria-label]")].map((el) => ({
+      el,
+      name: el.getAttribute("aria-label").toLowerCase(),
+    }));
+    const hit =
+      candidates.find((c) => c.name === wanted) ??
+      candidates.find((c) => c.name.startsWith(wanted)) ??
+      candidates.find((c) => c.name.includes(wanted));
+    if (!hit) return false;
+    hit.el.click();
+    return true;
+  })()`);
+  if (!clicked) {
+    failures.push(`${page}: no rail entry labelled "${label(page)}"`);
+    continue;
+  }
+  await settle();
+
+  const { heading, blocks, framed, pinned, tiny, column } = await evaluate(probe);
+
+  if (!framed || !heading || !blocks?.length) {
+    console.log(`${page.padEnd(12)} still its own layout, not a PageFrame page: nothing to check`);
+    continue;
+  }
+
+  for (let i = 1; i < blocks.length; i += 1) {
+    if (blocks[i].top < blocks[i - 1].bottom - 1) {
+      failures.push(
+        `${page}: "${blocks[i - 1].title}" (${blocks[i - 1].top}-${blocks[i - 1].bottom}) overlaps "${blocks[i].title}" (${blocks[i].top}-${blocks[i].bottom})`,
+      );
+    }
+  }
+
+  if (pinned.length) failures.push(`${page}: pinned elements in main: ${pinned.join(" | ")}`);
+  if (tiny.length) {
+    failures.push(
+      `${page}: controls under 16px: ${tiny.map((b) => `${b.label || "(no label)"} ${b.w}x${b.h}`).join(", ")}`,
+    );
+  }
+
+  for (const block of blocks) {
+    if (block.left < column.left - 1 || block.right > column.right + 1) {
+      failures.push(
+        `${page}: "${block.title}" escapes the column (${block.left}-${block.right} vs ${column.left}-${column.right})`,
+      );
+    }
+  }
+
+  console.log(
+    `${page.padEnd(9)} ${String(heading ?? "?").padEnd(22)} ${String(blocks.length).padStart(2)} blocks, column ${column.left}-${column.right}`,
+  );
+}
+
+session.close();
+
+if (failures.length) {
+  console.error("");
+  for (const failure of failures) console.error(`FAIL ${failure}`);
+  process.exitCode = 1;
+} else {
+  console.log("\nlayout ok: no overlaps, nothing pinned, every block inside the column");
+}
