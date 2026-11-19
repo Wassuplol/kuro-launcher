@@ -47,6 +47,21 @@ jobs:
       - name: type check
         run: pnpm exec tsc --noEmit
 
+      # The UI is web code, but it is not a website: the app serves it from its own
+      # webview. A build that carried the development server's address would ask the
+      # person for a localhost that is not running, so the bundle is checked for it.
+      - name: the bundle must not point at a development server
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm build
+          if grep -rl "localhost:1420" dist >/dev/null 2>&1; then
+            echo "::error::dist contains the development server address"
+            grep -rl "localhost:1420" dist
+            exit 1
+          fi
+          echo "dist is clean of development addresses"
+
       - name: rust format
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
