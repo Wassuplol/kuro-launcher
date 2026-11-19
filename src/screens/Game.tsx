@@ -119,6 +119,17 @@ export function GameScreen() {
 
           <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-[12px] sm:grid-cols-4">
             <Fact label="Playing" value={detail ? detail.players.toLocaleString() : "…"} />
+            {/* A paid game says so before the Play button, not after the client opens. */}
+            <Fact
+              label="Access"
+              value={
+                detail == null
+                  ? "…"
+                  : detail.price
+                    ? `${detail.price} Robux to play`
+                    : "Free"
+              }
+            />
             <Fact label="Visits" value={detail ? detail.visits.toLocaleString() : "…"} />
             <Fact
               label="Rating"

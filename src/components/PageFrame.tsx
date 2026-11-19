@@ -17,7 +17,7 @@ export function PageFrame({
   title: string;
   subtitle?: string;
   aside?: ReactNode;
-  /** A page of tiles wants the window's width; a page of forms does not. */
+  /** A page of tiles takes the whole window; a page of forms stays a readable column. */
   wide?: boolean;
   children: ReactNode;
 }) {
@@ -41,7 +41,7 @@ export function PageFrame({
           viewport down as thumbnails arrive, which reads as the page scrolling
           itself. */}
       <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-14 [overflow-anchor:none]">
-        <div className={wide ? "max-w-[1180px]" : "max-w-[820px]"}>{children}</div>
+        <div className={wide ? "w-full" : "mx-auto w-full max-w-[820px]"}>{children}</div>
       </div>
     </div>
   );

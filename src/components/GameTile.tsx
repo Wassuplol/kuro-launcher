@@ -41,8 +41,20 @@ export function GameTile({ game, className }: { game: GameCard; className?: stri
             <div className="h-full w-full" aria-hidden />
           )}
         </div>
-        <div className="mt-1.5 truncate text-[12px] leading-[1.35] text-body group-hover:text-gold">
-          {name || "Reading the name"}
+        <div className="mt-1.5 flex items-baseline gap-1.5">
+          <span className="min-w-0 truncate text-[12px] leading-[1.35] text-body group-hover:text-gold">
+            {name || "Reading the name"}
+          </span>
+          {/* Paid access, said on the tile: meeting a paywall in the Roblox client
+              because the launcher did not mention it is the thing this prevents. */}
+          {game.price ? (
+            <span
+              className="num shrink-0 rounded-[3px] bg-gold/15 px-1 text-[10px] leading-[1.5] text-gold"
+              title={`Paid access: ${game.price} Robux`}
+            >
+              R$ {game.price}
+            </span>
+          ) : null}
         </div>
         <div className="truncate text-[11px] leading-[1.4] text-muted">
           {game.players > 0 ? `${game.players.toLocaleString()} playing` : "nobody playing"}

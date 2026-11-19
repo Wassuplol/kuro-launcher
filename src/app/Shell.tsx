@@ -18,6 +18,7 @@ import { motion } from "motion/react";
 import type { ComponentType } from "react";
 
 import { AssistantPanel } from "../components/AssistantPanel";
+import { RobuxPill } from "../components/RobuxPill";
 import { RailItem } from "../components/RailItem";
 import { WindowControls } from "../components/WindowControls";
 import { cn } from "../lib/cn";
@@ -127,6 +128,7 @@ function TitleBar() {
       </span>
 
       <div className="ml-auto flex h-full items-stretch">
+        <RobuxPill />
         <button
           type="button"
           onClick={openPalette}

@@ -1,49 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type {
-  AccountView,
-  AssistantConnection,
-  AssistantFinished,
-  AssistantTurn,
-  AppInfo,
-  ClientKind,
-  FlagsView,
-  FlagCatalog,
-  FlagDiff,
-  FlagHit,
-  FlagLease,
-  FlagRow,
-  FlagSnapshot,
-  FlagStore,
-  DiscoveryFeed,
-  DiscoverySearch,
-  GameDetail,
-  GameServers,
-  GpuPin,
-  ImportedFlags,
-  InstallMethod,
-  Launched,
-  LaunchReading,
-  LaunchState,
-  LaunchTile,
-  Ledger,
-  LinkState,
-  MultiInstance,
-  Party,
-  PlayLog,
-  PresenceView,
-  Played,
-  PrunePlan,
-  PruneResult,
-  Receipt,
-  Roster,
-  QuickLoginAttempt,
-  QuickLoginPoll,
-  Settings,
-  Shelf,
-  StripState,
-  SupplySnapshot,
-  VerifyReport,
-} from "./types";
+import type { AccountView, AppInfo, AssistantConnection, AssistantFinished, AssistantTurn, Balance, ClientKind, DiscoveryFeed, DiscoverySearch, FlagCatalog, FlagDiff, FlagHit, FlagLease, FlagRow, FlagSnapshot, FlagStore, FlagsView, GameDetail, GameServers, GpuPin, ImportedFlags, InstallMethod, LaunchReading, LaunchState, LaunchTile, Launched, Ledger, LinkState, MultiInstance, Party, PlayLog, Played, PresenceView, PrunePlan, PruneResult, QuickLoginAttempt, QuickLoginPoll, Receipt, Roster, Settings, Shelf, StripState, SupplySnapshot, VerifyReport } from "./types";
 
 export type FailureCode =
   | "client_missing"
@@ -119,6 +75,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 
 export const api = {
   appInfo: () => call<AppInfo>("app_info"),
+  robux: () => call<Balance>("robux_balance"),
   loadSettings: () => call<Settings>("settings_load"),
   saveSettings: (next: Settings) => call<Settings>("settings_save", { next }),
   resetSettings: () => call<Settings>("settings_reset"),

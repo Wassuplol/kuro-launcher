@@ -219,6 +219,7 @@ pub fn spawn(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut link: Option<Link> = None;
         let mut shown: Option<String> = None;
+        let mut beat: u32 = 0;
 
         loop {
             let Some(state) = app.try_state::<crate::AppState>() else {
@@ -276,7 +277,15 @@ pub fn spawn(app: tauri::AppHandle) {
             }
 
             // What the person is doing, from the log the Sessions page already reads.
-            let session = receipts::live(&state.data_root);
+            //
+            // Two conditions, and both matter. The client has to be running, because a
+            // log stays on disk for half an hour after a game is closed and the card
+            // outliving the game is the thing this is fixing. And the log has to carry a
+            // handshake: a client that opened but never reached a server is not "playing"
+            // anything, and saying "joining a server" for an hour is a lie the card told.
+            let running = crate::launch::spawn::player_running();
+            let session = receipts::live(&state.data_root)
+                .filter(|receipt| shows(running, receipt.handshake, receipt.place));
             let wanted = session.as_ref().map(|receipt| {
                 activity(
                     receipt.name.as_deref(),
@@ -307,7 +316,13 @@ pub fn spawn(app: tauri::AppHandle) {
                 }
             }
 
-            if wanted != shown {
+            // A card that never changes is also a socket that is never tested. Every
+            // third tick the same activity is sent again, which both refreshes the
+            // elapsed clock and finds out whether Discord is still there.
+            beat += 1;
+            let resync = beat % 3 == 0;
+
+            if wanted != shown || resync {
                 let result = match (link.as_mut(), wanted.clone()) {
                     (Some(open), activity) => open.show(activity.as_deref()),
                     (None, _) => Ok(()),
@@ -345,6 +360,15 @@ pub fn spawn(app: tauri::AppHandle) {
             std::thread::sleep(TICK);
         }
     });
+}
+
+/// Whether this is worth telling Discord about.
+///
+/// Three gates, and each one closed a way the card lied: the client has to be running
+/// (a log outlives the game), the server has to have answered (a client that never
+/// joined is not playing), and there has to be a place to name.
+fn shows(running: bool, handshake: bool, place: Option<u64>) -> bool {
+    running && handshake && place.is_some()
 }
 
 /// Validates an application id before it is stored.
@@ -389,6 +413,22 @@ pub fn discord_running() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_closed_game_is_not_still_playing() {
+        assert!(!shows(false, true, Some(189707)));
+    }
+
+    #[test]
+    fn a_client_that_never_reached_a_server_is_not_playing() {
+        assert!(!shows(true, false, Some(189707)));
+        assert!(!shows(true, false, None));
+    }
+
+    #[test]
+    fn a_live_joined_session_is_playing() {
+        assert!(shows(true, true, Some(189707)));
+    }
 
     #[test]
     fn an_application_id_has_to_look_like_one() {

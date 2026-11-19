@@ -1,5 +1,6 @@
 pub mod assistant;
 pub mod discovery;
+pub mod economy;
 pub mod error;
 pub mod flags;
 pub mod gpu;
@@ -131,6 +132,13 @@ fn settings_reset(state: State<'_, AppState>) -> Result<Settings, LaunchError> {
 
 /// Opens the data root in Explorer. Spawned directly so the frontend never
 /// receives a filesystem path it could pass somewhere else.
+/// What the account holds, in Robux. Read on demand: a number that is looked at twice a
+/// day does not need a poll, and a poll of a private endpoint is a request nobody asked for.
+#[tauri::command]
+fn robux_balance(state: State<'_, AppState>) -> Result<economy::Balance, LaunchError> {
+    economy::balance(&state.data_root)
+}
+
 #[tauri::command]
 fn open_data_root(state: State<'_, AppState>) -> Result<(), LaunchError> {
     std::process::Command::new("explorer")
@@ -2265,6 +2273,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            robux_balance,
             settings_load,
             settings_save,
             settings_reset,

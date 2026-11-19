@@ -487,6 +487,8 @@ export type GameCard = {
   players: number;
   creator: string;
   icon: string | null;
+  /** Paid access in Robux. Null or absent means free. */
+  price?: number | null;
 };
 
 export type FeedSection = {
@@ -524,6 +526,8 @@ export type GameDetail = {
   creator: string;
   description: string;
   players: number;
+  /** Paid access in Robux, when the game has one. */
+  price?: number | null;
   visits: number;
   maxPlayers: number;
   genre: string;
@@ -616,4 +620,12 @@ export type Receipt = {
   lines: number;
   bytes: number;
   logPath: string;
+};
+
+/** What the signed-in account holds, in Robux. */
+export type Balance = {
+  user: number;
+  name: string;
+  display: string;
+  robux: number;
 };

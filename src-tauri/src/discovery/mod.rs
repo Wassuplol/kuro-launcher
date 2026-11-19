@@ -236,6 +236,9 @@ struct RawGame {
     playing: u64,
     #[serde(default)]
     creator: Option<RawCreator>,
+    /// Present and non-zero only for paid access. `games?universeIds=` carries it.
+    #[serde(default)]
+    price: Option<u64>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -307,6 +310,8 @@ struct RawOne {
 struct RawDetail {
     id: u64,
     #[serde(default)]
+    price: Option<u64>,
+    #[serde(default)]
     root_place_id: Option<u64>,
     #[serde(default)]
     name: String,
@@ -374,6 +379,7 @@ struct Detail {
     creator: String,
     place: u64,
     players: u64,
+    price: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -385,6 +391,8 @@ pub struct GameCard {
     pub players: u64,
     pub creator: String,
     pub icon: Option<String>,
+    /// Paid access in Robux. `None` or zero is free, which most of them are.
+    pub price: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -432,6 +440,8 @@ pub struct GameDetail {
     pub up_votes: u64,
     pub down_votes: u64,
     pub icon: Option<String>,
+    /// Paid access in Robux, when the game has one.
+    pub price: Option<u64>,
     pub fetched: u64,
     pub cached: bool,
 }
@@ -565,6 +575,7 @@ pub fn home(budget: &Budget, cache: &Cache, cookie: Option<&str>) -> Result<Feed
                     players: 0,
                     creator: String::new(),
                     icon: None,
+                    price: None,
                 })
                 .collect(),
         });
@@ -581,6 +592,7 @@ pub fn home(budget: &Budget, cache: &Cache, cookie: Option<&str>) -> Result<Feed
                 card.creator = found.creator.clone();
                 card.place = found.place;
                 card.players = found.players;
+                card.price = found.price;
             }
             card.icon = icons.get(&card.universe).cloned();
         }
@@ -672,6 +684,7 @@ fn detail_of(game: &RawGame) -> Detail {
             .unwrap_or_default(),
         place: game.root_place_id.unwrap_or(game.id),
         players: game.playing,
+        price: game.price.filter(|price| *price > 0),
     }
 }
 
@@ -838,14 +851,24 @@ pub fn search(
                 players: r.player_count.unwrap_or(0),
                 creator: r.creator_name.unwrap_or_default(),
                 icon: None,
+                price: None,
             })
         })
         .collect();
 
     let ids: Vec<u64> = games.iter().map(|game| game.universe).collect();
     let icons = icons(budget, cache, &ids).unwrap_or_default();
+
+    // A search result is a card too, and a paid game has to say so here as well: this is
+    // where a person looks for a game they heard about by name, and finding out about the
+    // price after the client opens is the exact thing this build is stopping.
+    let details = hydrate(budget, cache, &ids, cookie).unwrap_or_default();
+
     for game in &mut games {
         game.icon = icons.get(&game.universe).cloned();
+        if let Some(found) = details.get(&game.universe) {
+            game.price = found.price;
+        }
     }
 
     Ok(Search {
@@ -928,6 +951,7 @@ pub fn game(
         up_votes,
         down_votes,
         icon: icons.get(&universe).cloned(),
+        price: raw.price.filter(|price| *price > 0),
         fetched: now(),
         cached,
     };
@@ -1289,6 +1313,7 @@ pub fn favorites(
                     .map(|detail| detail.creator.clone())
                     .unwrap_or_default(),
                 icon: icons.get(&favourite.id).cloned(),
+                price: detail.and_then(|detail| detail.price),
             }
         })
         .collect();

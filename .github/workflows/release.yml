@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to build, e.g. v0.2.1 (must match tauri.conf.json)"
+        description: "Tag to build, e.g. v0.2.2 (must match tauri.conf.json)"
         required: true
         type: string
 
@@ -173,6 +173,21 @@ jobs:
             Sessions and the launch panel can now copy a short invite link
             (`wassuplol.github.io/kuro-launcher/join/...`) that shows the game and the exact
             server before opening it, for people who do not have KURO installed.
+
+            ## What is new in 0.2.2
+
+            Robux, in two places that matter. The title bar shows what the account holds,
+            read from Roblox with the session this launcher already keeps. Paid access
+            shows on the tile and on the game page before anything starts, so the paywall
+            is met in this window and not in the client.
+
+            The window is used at its full width now. Pages of tiles fill it; pages of
+            forms stay a readable column in the middle instead of hugging the left edge.
+
+            Discord presence tells the truth. The card clears when the game closes, and a
+            client that opened but never reached a server no longer claims it is joining
+            one. A heartbeat re-sends the activity every 30 seconds, which also notices a
+            Discord that restarted underneath it.
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
