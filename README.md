@@ -48,6 +48,11 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | **Launch** | A place id, a game link, a private invite, a friend, or one exact server. One client at a time, idempotent |
 | **Versions** | Discover across both install roots, direct install with hash and signature checks, pin, prune, verify, repair |
 | **Flags** | Roblox's own 25,585-key catalogue, named profiles, a per-flag scope chain, and a write you can undo |
+| **Money** | The account's Robux in the title bar, and a paid game's price on its tile, in search and on its page before anything starts |
+| **Presence** | What you are playing on your Discord profile, off until you turn it on, and only while a client is inside a session |
+| **Links** | `kuro://` party links carrying a place, one exact server and one account. Registered from Settings for whichever copy is running, removed by the same button |
+| **Over the game** | An always-on-top strip naming the server the client actually reached, and how long the join took |
+| **Graphics** | A GPU preference written for the exact client executable, re-applied when Roblox installs a new version folder |
 | **Shell** | Eight pages, a command palette, settings, named failures with a code, a cause and an action |
 | **Install** | NSIS and MSI installers and a portable exe, built by CI on a tag, with SHA-256 for every file |
 
