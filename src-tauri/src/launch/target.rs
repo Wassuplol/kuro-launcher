@@ -61,8 +61,16 @@ impl Target {
             return Err(refused("it is empty"));
         }
 
-        // A whole launch URI pasted back in. Only its launcher URL matters.
-        if let Some(rest) = text.strip_prefix("roblox-player:") {
+        // A whole launch URI pasted back in, in either spelling the site uses: the
+        // long `roblox-player:` one and the short `roblox:` one. Only its launcher URL
+        // matters, and the prefix is not enough on its own: `roblox://placeId=1` starts
+        // with the same word and is a deep link, so a launch string has to name a launch.
+        let launch_string = ["roblox-player:", "roblox:"]
+            .into_iter()
+            .find_map(|prefix| text.strip_prefix(prefix))
+            .filter(|rest| rest.contains("launchmode:") || rest.contains("placelauncherurl:"));
+
+        if let Some(rest) = launch_string {
             if let Some(url) = rest
                 .split('+')
                 .find_map(|part| part.strip_prefix("placelauncherurl:"))
@@ -127,6 +135,9 @@ impl Target {
         let access = params
             .get("privateServerLinkCode")
             .or_else(|| params.get("linkCode"))
+            // The name `PlaceLauncher.ashx` itself uses for the same thing, which is the
+            // one an intercepted site link carries.
+            .or_else(|| params.get("accessCode"))
             .filter(|value| !value.is_empty())
             .cloned();
 

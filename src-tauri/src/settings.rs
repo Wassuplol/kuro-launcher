@@ -68,6 +68,28 @@ impl Default for Launching {
     }
 }
 
+/// Which links open in this app, and what happens when one arrives.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Handover {
+    /// Point `roblox://` and `roblox-player:` at this app instead of Roblox's own launcher.
+    /// Off by default: taking over the scheme Roblox installed is a decision about the
+    /// machine, not a sensible default.
+    pub takeover: bool,
+    /// Start a link the moment it arrives rather than filling the Launch page and waiting
+    /// for a press. On by default, because a Play button on roblox.com is already a press.
+    pub auto: bool,
+}
+
+impl Default for Handover {
+    fn default() -> Self {
+        Self {
+            takeover: false,
+            auto: true,
+        }
+    }
+}
+
 /// What Discord is allowed to be told.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -103,6 +125,7 @@ pub struct Settings {
     pub supply: Supply,
     pub launch: Launching,
     pub discord: Discord,
+    pub handover: Handover,
     pub assistant: Assistant,
     pub advanced: bool,
 }
@@ -116,6 +139,7 @@ impl Default for Settings {
             supply: Supply::default(),
             launch: Launching::default(),
             discord: Discord::default(),
+            handover: Handover::default(),
             assistant: Assistant::default(),
             advanced: false,
         }

@@ -183,18 +183,54 @@ pub fn state(scheme: &str) -> Option<String> {
 /// and the last one wins, which is what a person who just ran a newer build expects.
 pub fn register(scheme: &str, exe: &Path) -> Result<String, LaunchError> {
     let command = format!("\"{}\" \"%1\"", exe.to_string_lossy());
-
-    let root = classes(scheme);
-    write_value(&root, "", "URL:KURO launch link")?;
-    write_value(&root, "URL Protocol", "")?;
-    write_value(&command_key(scheme), "", &command)?;
-
+    write_scheme(scheme, &command, "URL:KURO launch link")?;
     Ok(command)
+}
+
+/// Writes a scheme to run one exact command, with the label Windows shows for it.
+///
+/// Public inside the crate because taking over Roblox's own schemes restores a command
+/// string this app did not build, and that string has to go back byte for byte.
+pub(crate) fn write_scheme(scheme: &str, command: &str, label: &str) -> Result<(), LaunchError> {
+    let root = classes(scheme);
+    write_value(&root, "", label)?;
+    write_value(&root, "URL Protocol", "")?;
+    write_value(&command_key(scheme), "", command)?;
+    Ok(())
+}
+
+/// Where the handlers this app displaced are kept.
+///
+/// The registry rather than the data folder, and for one reason: an uninstaller runs after
+/// the folder is gone, while the person who installed this app still expects Roblox's own
+/// launcher back rather than a scheme pointing at a file that no longer exists.
+pub(crate) fn remembered(scheme: &str) -> Option<String> {
+    read_value(HKEY_CURRENT_USER, &remembered_key(scheme), "previous")
+        .ok()
+        .flatten()
+}
+
+pub(crate) fn remember(scheme: &str, command: &str) {
+    let _ = write_value(&remembered_key(scheme), "previous", command);
+}
+
+pub(crate) fn forget_remembered(scheme: &str) {
+    let _ = delete_tree(&remembered_key(scheme));
+}
+
+const REMEMBERED: &str = r"Software\Kuro Launcher\Schemes";
+
+fn remembered_key(scheme: &str) -> String {
+    format!(r"{REMEMBERED}\{scheme}")
 }
 
 /// Removes the whole tree for this scheme.
 pub fn unregister(scheme: &str) -> Result<(), LaunchError> {
-    let subkey = wide(&classes(scheme));
+    delete_tree(&classes(scheme))
+}
+
+fn delete_tree(key: &str) -> Result<(), LaunchError> {
+    let subkey = wide(key);
 
     // SAFETY: the subkey is null terminated; a missing key is the state this call exists
     // to reach, so it is not an error.

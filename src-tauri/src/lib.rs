@@ -4,6 +4,7 @@ pub mod economy;
 pub mod error;
 pub mod flags;
 pub mod gpu;
+pub mod handover;
 pub mod http;
 pub mod identity;
 pub mod launch;
@@ -54,6 +55,14 @@ pub struct AppState {
     /// A `kuro://` link waiting to be read by the page. Windows hands one over as a
     /// command-line argument, and a second launch hands it to the running process.
     pub pending_link: Mutex<Option<links::Party>>,
+    /// A Roblox link waiting to be read by the page: the raw argument, taken once so one
+    /// click on roblox.com cannot start two clients.
+    pub pending_native: Mutex<Option<String>>,
+    /// Something the takeover did without being asked, said once on the Settings row.
+    pub handover_note: Mutex<Option<String>>,
+    /// True when a link started this process, which is the one case where the opening
+    /// sequence is in the way of the thing the person asked for.
+    pub started_by_link: bool,
     /// Set once the page has taken control of the window. Until then the window
     /// stays hidden, so nothing full-size is ever painted before the opening.
     pub opened: Arc<AtomicBool>,
@@ -71,6 +80,8 @@ pub struct AppInfo {
     pub data_root: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub settings_error: Option<LaunchError>,
+    /// A link started this build, so the page skips its opening and goes straight to it.
+    pub started_by_link: bool,
 }
 
 fn poisoned() -> LaunchError {
@@ -92,6 +103,7 @@ fn app_info(app: tauri::AppHandle, state: State<'_, AppState>) -> AppInfo {
         identifier: app.config().identifier.clone(),
         data_root: state.data_root.to_string_lossy().to_string(),
         settings_error: state.settings_error.clone(),
+        started_by_link: state.started_by_link,
     }
 }
 
@@ -755,6 +767,33 @@ async fn launch_start(
     .await
 }
 
+/// A launch that came from a link rather than from this window.
+///
+/// Identical to `launch_start` except for the last act: a Play press on roblox.com asked
+/// for the game, not for a launcher on top of it, so the window steps aside once the client
+/// is running. It is minimised rather than closed, so the flag lease keeps a process to
+/// finish in and the result is still there when the game closes.
+#[tauri::command]
+async fn launch_link(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    target: String,
+    user_id: Option<u64>,
+) -> Result<launch::Launched, LaunchError> {
+    run_launch(
+        &app,
+        state.inner(),
+        RunRequest {
+            target,
+            user_id,
+            flags: None,
+            client: None,
+            after: profiles::After::Minimize,
+        },
+    )
+    .await
+}
+
 // ---- launch tiles ----
 
 /// Every tile on this machine, newest first.
@@ -904,6 +943,99 @@ fn link_for(place: Option<u64>, server: Option<String>, account: Option<u64>) ->
         server,
         account,
     })
+}
+
+// ---- Roblox's own links ----
+
+fn current_exe() -> Result<PathBuf, LaunchError> {
+    std::env::current_exe().map_err(|e| {
+        LaunchError::new(
+            FailureCode::Internal,
+            format!("This build does not know where it lives: {e}"),
+        )
+    })
+}
+
+/// Where the two Roblox schemes point right now, and whether this build owns them.
+#[tauri::command]
+fn handover_state(state: State<'_, AppState>) -> Result<handover::State, LaunchError> {
+    let note = state.handover_note.lock().map_err(|_| poisoned())?.clone();
+    Ok(handover::state(&current_exe()?, note))
+}
+
+/// Points Roblox's own game links at this build, remembering what was there.
+#[tauri::command]
+fn handover_take() -> Result<handover::State, LaunchError> {
+    let exe = current_exe()?;
+    let schemes = handover::take(&exe)?;
+    Ok(handover::State {
+        exe: exe.to_string_lossy().to_string(),
+        schemes,
+        note: None,
+    })
+}
+
+/// Puts Roblox's launcher back where it was.
+#[tauri::command]
+fn handover_give_back(state: State<'_, AppState>) -> Result<handover::State, LaunchError> {
+    // A remembered path can name a version folder this app pruned, so the client this
+    // machine would run today is the fallback: a link that opens nothing is worse than a
+    // link that opens the newest build.
+    let fallback = installed_clients(&state)
+        .ok()
+        .and_then(|(installed, pinned)| {
+            launch::client_for(&installed, &pinned)
+                .map(|client| PathBuf::from(&client.path).join(Kind::Player.executable()))
+        });
+    let schemes = handover::give_back(fallback.as_deref())?;
+    Ok(handover::State {
+        exe: current_exe()?.to_string_lossy().to_string(),
+        schemes,
+        note: None,
+    })
+}
+
+/// A Roblox link waiting for the page, taken rather than read: one link is one launch.
+#[tauri::command]
+fn native_take(state: State<'_, AppState>) -> Result<Option<String>, LaunchError> {
+    Ok(state.pending_native.lock().map_err(|_| poisoned())?.take())
+}
+
+/// Routes one command line.
+///
+/// A party link waits for the page, as it always has. A Roblox link is either handed to the
+/// page to launch or handed straight to Roblox's own handler, because a click that opened
+/// this app instead of the game has to end in the game.
+fn route_args(app: &AppHandle, args: &[String]) -> bool {
+    let Some(state) = app.try_state::<AppState>() else {
+        return false;
+    };
+
+    match handover::incoming(args) {
+        Some(handover::Incoming::Party(party)) => {
+            if let Ok(mut slot) = state.pending_link.lock() {
+                *slot = Some(party);
+            }
+        }
+        Some(handover::Incoming::Launch(raw)) => {
+            if let Ok(mut slot) = state.pending_native.lock() {
+                *slot = Some(raw);
+            }
+        }
+        Some(handover::Incoming::Other { raw, why }) => {
+            let note = match handover::forward(&raw) {
+                Ok(()) => format!("Roblox's own launcher opened that link, because {why}."),
+                Err(error) => error.message,
+            };
+            if let Ok(mut slot) = state.handover_note.lock() {
+                *slot = Some(note);
+            }
+        }
+        None => return false,
+    }
+
+    let _ = app.emit("link", ());
+    true
 }
 
 // ---- Discord presence ----
@@ -2164,17 +2296,11 @@ pub fn run() {
                 let _ = window.set_focus();
             }
 
-            // A `kuro://` link that opened a second copy of the app belongs to the copy
-            // that is already running. It is handed over rather than dropped, and the
-            // event tells the page to read it.
-            if let Some(party) = links::from_args(&args) {
-                if let Some(state) = app.try_state::<AppState>() {
-                    if let Ok(mut slot) = state.pending_link.lock() {
-                        *slot = Some(party);
-                    }
-                }
-                let _ = app.emit("link", ());
-            }
+            // A link that opened a second copy of the app belongs to the copy that is
+            // already running. A `kuro://` party lands on the Launch page; a Roblox link
+            // is read, launched, or handed to Roblox's own handler, and the event tells
+            // the page to look.
+            route_args(app, &args);
         }))
         // Size and position are restored; visibility is not. The plugin saves
         // `visible: true` with the geometry, and restoring that showed this
@@ -2245,11 +2371,28 @@ pub fn run() {
             // crash path real rather than aspirational.
             let recovered = flags::apply::revert(&root).ok().flatten();
 
-            // A link that started this process arrives as a command-line argument, and
-            // is held here until the page asks for it. Nothing is launched on the
-            // strength of a link alone: the page shows what it would open first.
+            // A link that started this process arrives as a command-line argument and is
+            // routed once the state exists, below, through the same path a second launch
+            // takes.
             let args: Vec<String> = std::env::args().collect();
-            let pending_link = links::from_args(&args);
+            let started_by_link = handover::incoming(&args).is_some();
+
+            // Owning Roblox's schemes is a claim against an installer that rewrites them
+            // on every client update, so it is re-stated on each start rather than assumed
+            // to have survived.
+            let handover_note = if loaded.handover.takeover {
+                match current_exe().map(|exe| handover::reassert(&exe)) {
+                    Ok(Ok(rewritten)) if !rewritten.is_empty() => Some(format!(
+                        "Roblox pointed the {} link at its own launcher again, and this build took it back.",
+                        rewritten.join(" and ")
+                    )),
+                    Ok(Err(error)) => Some(error.message),
+                    Err(error) => Some(error.message),
+                    _ => None,
+                }
+            } else {
+                None
+            };
 
             app.manage(AppState {
                 data_root: root,
@@ -2258,13 +2401,20 @@ pub fn run() {
                 singleton: Mutex::new(singleton),
                 recovered: Mutex::new(recovered),
                 supply: SupplyState::default(),
-                pending_link: Mutex::new(pending_link),
+                pending_link: Mutex::new(None),
+                pending_native: Mutex::new(None),
+                handover_note: Mutex::new(handover_note),
+                started_by_link,
                 presence: Mutex::new(presence::Status::default()),
                 budget: std::sync::Arc::new(discovery::Budget::default()),
                 cache: std::sync::Arc::new(discovery::Cache::default()),
                 opened,
                 cancel: std::sync::Arc::new(AtomicBool::new(false)),
             });
+            // The command line is routed now that the state exists, so a link that started
+            // this process lands in the same slot a second launch uses.
+            route_args(app.handle(), &args);
+
             // Presence is one connection and one socket, so it is one thread. It reads the
             // settings each tick, which is why switching it off needs no message.
             presence::spawn(app.handle().clone());
@@ -2291,6 +2441,7 @@ pub fn run() {
             quicklogin_finish,
             launch_read,
             launch_start,
+            launch_link,
             launch_multi_instance,
             launch_state,
             link_state,
@@ -2298,6 +2449,10 @@ pub fn run() {
             link_unregister,
             link_take,
             link_for,
+            handover_state,
+            handover_take,
+            handover_give_back,
+            native_take,
             presence_view,
             presence_save,
             profiles_list,

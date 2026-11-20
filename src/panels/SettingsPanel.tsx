@@ -5,7 +5,7 @@ import { AssistantSection } from "./AssistantSection";
 import { Toggle } from "../components/Toggle";
 import { api } from "../lib/ipc";
 import { cn } from "../lib/cn";
-import type { Intent, LinkState, PresenceView } from "../lib/types";
+import type { HandoverState, Intent, LinkState, PresenceView } from "../lib/types";
 import { useShell } from "../store/shell";
 
 const GENRES = [
@@ -39,6 +39,8 @@ export function SettingsPanel() {
 
   const [link, setLink] = useState<LinkState | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
+  const [handover, setHandover] = useState<HandoverState | null>(null);
+  const [handoverBusy, setHandoverBusy] = useState(false);
   const [presence, setPresence] = useState<PresenceView | null>(null);
   const [appId, setAppId] = useState("");
   const [presenceBusy, setPresenceBusy] = useState(false);
@@ -48,6 +50,11 @@ export function SettingsPanel() {
       .linkState()
       .then(setLink)
       .catch(() => setLink(null));
+
+    void api
+      .handoverState()
+      .then(setHandover)
+      .catch(() => setHandover(null));
   }, []);
 
   useEffect(() => {
@@ -94,6 +101,24 @@ export function SettingsPanel() {
     return "On. Looking for Discord.";
   })();
 
+  // The registry is what Windows does and the setting is what this app re-states at the
+  // next start, so both move together: a toggle that said on while Windows still ran
+  // Roblox's launcher would be the exact lie this section exists to avoid.
+  const toggleHandover = async (on: boolean) => {
+    setHandoverBusy(true);
+    try {
+      const next = on ? await api.handoverTake() : await api.handoverGiveBack();
+      setHandover(next);
+      await update((draft) => {
+        draft.handover.takeover = on;
+      });
+    } catch {
+      // The row keeps saying what it said: a failed write must not look like a state.
+    } finally {
+      setHandoverBusy(false);
+    }
+  };
+
   const toggleLink = async () => {
     setLinkBusy(true);
     try {
@@ -111,6 +136,14 @@ export function SettingsPanel() {
   useEffect(() => {
     setName(settings?.identity.name ?? "");
   }, [settings?.identity.name]);
+
+  // Both schemes, because one scheme taken and the other not is a half-replaced machine.
+  const handoverOurs = handover?.schemes.every((scheme) => scheme.ours) ?? false;
+
+  const currentHandler =
+    handover?.schemes.find((scheme) => scheme.scheme === "roblox-player")?.current ??
+    handover?.schemes.find((scheme) => scheme.current)?.current ??
+    null;
 
   if (!open) return null;
 
@@ -350,6 +383,51 @@ export function SettingsPanel() {
                 <span className="num">{link.command}</span>. Registering replaces that with
                 this build.
               </p>
+            ) : null}
+          </Section>
+
+          <Section title="Roblox's own links">
+            <Row
+              label="Open Roblox's launch links here"
+              hint={
+                handoverOurs
+                  ? "Windows opens both of Roblox's game schemes with this build. Roblox's launcher is not removed: turning this off puts it back exactly as it was."
+                  : "A Play press on roblox.com asks Windows for Roblox's own launcher. Turning this on points roblox:// and roblox-player: at this build, so that press lands here instead."
+              }
+            >
+              <Toggle
+                label="Open Roblox's launch links in this build"
+                checked={handoverOurs}
+                disabled={handoverBusy || handover === null}
+                onCheckedChange={(checked) => void toggleHandover(checked)}
+              />
+            </Row>
+
+            <Row
+              label="Start them as they arrive"
+              hint="A Play press on roblox.com is already a press, so the launch begins without another click. Off means the link fills the Launch page and waits for you."
+            >
+              <Toggle
+                label="Start Roblox links as they arrive"
+                checked={settings?.handover.auto ?? true}
+                disabled={!handoverOurs}
+                onCheckedChange={(checked) =>
+                  void update((draft) => {
+                    draft.handover.auto = checked;
+                  })
+                }
+              />
+            </Row>
+
+            {handover && !handoverOurs && currentHandler ? (
+              <p className="px-3.5 py-2 text-[11px] leading-[1.55] text-muted">
+                Windows opens roblox-player: with <span className="num">{currentHandler}</span>
+                . Taking it turns every game link from the site into a launch from here.
+              </p>
+            ) : null}
+
+            {handover?.note ? (
+              <p className="px-3.5 py-2 text-[11px] leading-[1.55] text-muted">{handover.note}</p>
             ) : null}
           </Section>
 

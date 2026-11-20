@@ -40,22 +40,16 @@ export function LaunchBody() {
   const [running, setRunning] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
+  const autoFired = useRef(false);
+
+  const pending = useShell((state) => state.pending);
+  const pendingAuto = useShell((state) => state.pendingAuto);
 
   useEffect(() => {
     void load();
     setDone(null);
     setLaunchProblem(null);
 
-    // A tile on Home or in Search hands its place here rather than spawning a
-    // client. The read below picks it up on the same pass, so the page arrives
-    // already knowing what it would run.
-    const pending = useShell.getState().pending;
-    const pendingAccount = useShell.getState().pendingAccount;
-    if (pending) {
-      setTarget(pending);
-      if (pendingAccount != null) setAccount(pendingAccount);
-      useShell.getState().clearPending();
-    }
     // The field is the point of this page, so it takes focus. Unless something
     // else has opened in the meantime: being pulled out of the palette by a
     // timer is the kind of small theft that makes an app feel broken.
@@ -64,6 +58,23 @@ export function LaunchBody() {
     }, 120);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  // A destination handed over by a tile, a party link, or a Roblox link. Subscribed rather
+  // than read once on mount, because the second link of a session usually arrives while
+  // this page is already the one on screen.
+  useEffect(() => {
+    if (!pending) return;
+    // A new link is a new press, so the one-shot below is armed again. A ref that stayed
+    // set would act on the first link of a session and ignore every one after it, which is
+    // the failure mode a launcher replacement cannot have.
+    autoFired.current = false;
+    setTarget(pending);
+    setDone(null);
+    setLaunchProblem(null);
+    const accountId = useShell.getState().pendingAccount;
+    if (accountId != null) setAccount(accountId);
+    useShell.getState().clearPending();
+  }, [pending]);
 
   // Whether a game is already running decides what Play will do, so it is read
   // rather than guessed at from a setting.
@@ -148,14 +159,18 @@ export function LaunchBody() {
     }
   };
 
-  const play = async () => {
+  // `stepAside` is for a launch that came from a link: the game is what the person asked
+  // for, so the window minimises once the client is running instead of sitting over it.
+  const play = async (stepAside = false) => {
     const text = target.trim();
     if (!text || working) return;
     setWorking(true);
     setLaunchProblem(null);
     setDone(null);
     try {
-      const launched = await api.launchStart(text, chosen?.userId ?? null);
+      const launched = stepAside
+        ? await api.launchLink(text, chosen?.userId ?? null)
+        : await api.launchStart(text, chosen?.userId ?? null);
       setDone(launched);
       record(launched, chosen?.userId ?? null);
     } catch (value) {
@@ -168,6 +183,20 @@ export function LaunchBody() {
       setWorking(false);
     }
   };
+
+  // A Roblox link is a press that already happened, so when the switch says so the launch
+  // starts here rather than waiting for a second one. It runs after `play` exists so the
+  // result lands in the same place the Play button's does.
+  useEffect(() => {
+    if (!pendingAuto || autoFired.current) return;
+    if (!target.trim() || working) return;
+    // No session to mint a ticket from. The page says so above the Play button, and
+    // nothing here pretends a launch happened.
+    if (list.length === 0) return;
+    autoFired.current = true;
+    useShell.getState().clearAuto();
+    void play(true);
+  }, [pendingAuto, target, working, list.length, play]);
 
   const ready = Boolean(reading) && Boolean(chosen) && !working;
 

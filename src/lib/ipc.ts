@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AccountView, AppInfo, AssistantConnection, AssistantFinished, AssistantTurn, Balance, ClientKind, DiscoveryFeed, DiscoverySearch, FlagCatalog, FlagDiff, FlagHit, FlagLease, FlagRow, FlagSnapshot, FlagStore, FlagsView, GameDetail, GameServers, GpuPin, ImportedFlags, InstallMethod, LaunchReading, LaunchState, LaunchTile, Launched, Ledger, LinkState, MultiInstance, Party, PlayLog, Played, PresenceView, PrunePlan, PruneResult, QuickLoginAttempt, QuickLoginPoll, Receipt, Roster, Settings, Shelf, StripState, SupplySnapshot, VerifyReport } from "./types";
+import type { AccountView, AppInfo, AssistantConnection, AssistantFinished, AssistantTurn, Balance, ClientKind, DiscoveryFeed, DiscoverySearch, FlagCatalog, FlagDiff, FlagHit, FlagLease, FlagRow, FlagSnapshot, FlagStore, FlagsView, GameDetail, GameServers, GpuPin, HandoverState, ImportedFlags, InstallMethod, LaunchReading, LaunchState, LaunchTile, Launched, Ledger, LinkState, MultiInstance, Party, PlayLog, Played, PresenceView, PrunePlan, PruneResult, QuickLoginAttempt, QuickLoginPoll, Receipt, Roster, Settings, Shelf, StripState, SupplySnapshot, VerifyReport } from "./types";
 
 export type FailureCode =
   | "client_missing"
@@ -104,6 +104,9 @@ export const api = {
 
   /** Reads a destination without starting anything. */
   launchRead: (target: string) => call<LaunchReading>("launch_read", { target }),
+  /** A Play press in this window: the launcher stays where it is. */
+  launchLink: (target: string, userId: number | null) =>
+    call<Launched>("launch_link", { target, userId }),
   launchStart: (target: string, userId: number | null) =>
     call<Launched>("launch_start", { target, userId }),
   launchMultiInstance: (enabled: boolean) =>
@@ -127,6 +130,10 @@ export const api = {
   linkUnregister: () => call<LinkState>("link_unregister"),
   /** The link waiting for the page, taken rather than read. */
   linkTake: () => call<Party | null>("link_take"),
+  nativeTake: () => call<string | null>("native_take"),
+  handoverState: () => call<HandoverState>("handover_state"),
+  handoverTake: () => call<HandoverState>("handover_take"),
+  handoverGiveBack: () => call<HandoverState>("handover_give_back"),
   /** The text for a party link; null when there is nothing to point at. */
   linkFor: (place: number | null, server: string | null, account: number | null) =>
     call<string | null>("link_for", { place, server, account }),

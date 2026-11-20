@@ -18,6 +18,7 @@ export type Settings = {
   supply: { pinned: string | null };
   launch: { multiInstance: boolean; gpuPin: boolean };
   discord: { enabled: boolean; appId: string };
+  handover: { takeover: boolean; auto: boolean };
   advanced: boolean;
 };
 
@@ -33,6 +34,25 @@ export type AppInfo = {
   identifier: string;
   dataRoot: string;
   settingsError?: SettingsError;
+  /** A link started this build, so the page skips its opening. */
+  startedByLink?: boolean;
+};
+
+/** One scheme Roblox installed, and whether this build answers for it. */
+export type HandoverScheme = {
+  scheme: string;
+  /** What Windows would run right now. */
+  current: string | null;
+  /** The command this app displaced, once it has taken the scheme. */
+  previous: string | null;
+  ours: boolean;
+};
+
+export type HandoverState = {
+  exe: string;
+  schemes: HandoverScheme[];
+  /** Something the takeover did without asking: a scheme taken back, a link handed over. */
+  note: string | null;
 };
 
 export type ClientKind = "player" | "studio";

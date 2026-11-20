@@ -51,6 +51,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | **Money** | The account's Robux in the title bar, and a paid game's price on its tile, in search and on its page before anything starts |
 | **Presence** | What you are playing on your Discord profile, off until you turn it on, and only while a client is inside a session |
 | **Links** | `kuro://` party links carrying a place, one exact server and one account. Registered from Settings for whichever copy is running, removed by the same button |
+| **Roblox links** | `roblox://` and `roblox-player:` pointed at this app, so a Play press on roblox.com opens the game here. Roblox's own launcher comes back when it is turned off, or on uninstall |
 | **Over the game** | An always-on-top strip naming the server the client actually reached, and how long the join took |
 | **Graphics** | A GPU preference written for the exact client executable, re-applied when Roblox installs a new version folder |
 | **Shell** | Eight pages, a command palette, settings, named failures with a code, a cause and an action |
@@ -82,6 +83,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 |---|---|
 | A signed installer | No code-signing certificate, so SmartScreen warns once on first run. The hashes are the substitute: check them before you run anything |
 | An updater | The app never phones home for anything but Roblox, so an update is a download, not a push |
+| Studio's links | `roblox-studio` and `roblox-studio-auth` stay with Studio. A place editor is not a game launch, and taking it would be a lie about what this app is |
 
 ## Three things this app had to measure, not assume
 

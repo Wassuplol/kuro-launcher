@@ -16,6 +16,7 @@ let played = false;
 
 export function App() {
   const ready = useShell((state) => state.ready);
+  const info = useShell((state) => state.info);
   const settings = useShell((state) => state.settings);
   const onboardingOpen = useShell((state) => state.onboardingOpen);
   const bootFailed = useShell((state) => state.bootFailed);
@@ -64,7 +65,7 @@ export function App() {
 
     // No opening: the window still has to be taken back to the size the person
     // left it at, so the settle runs either way.
-    if (settings?.intro.instantStart === true || played) {
+    if (settings?.intro.instantStart === true || played || info?.startedByLink === true) {
       void api.windowGrow(target.width, target.height, 0).catch(() => undefined);
       setAppearing(true);
       openQuestions();

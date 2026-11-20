@@ -20,6 +20,8 @@ type ShellState = {
   pending: string | null;
   /** The account a link named, applied by the Launch page once. */
   pendingAccount: number | null;
+  /** A link that should start without a second press, because it already was one. */
+  pendingAuto: boolean;
   /** The game the detail page is showing, put there by the tile that opened it. */
   game: { universe: number; place: number } | null;
   paletteOpen: boolean;
@@ -30,7 +32,8 @@ type ShellState = {
 
   boot: () => Promise<void>;
   go: (page: Page) => void;
-  prefill: (target: string, account?: number | null) => void;
+  prefill: (target: string, account?: number | null, auto?: boolean) => void;
+  clearAuto: () => void;
   /** Reads a `kuro://` link the backend is holding, and opens the Launch page on it. */
   readLink: () => Promise<void>;
   clearPending: () => void;
@@ -56,6 +59,7 @@ export const useShell = create<ShellState>()((set, get) => ({
   page: pageFromHash(window.location.hash),
   pending: null,
   pendingAccount: null,
+  pendingAuto: false,
   game: null,
   paletteOpen: false,
   settingsOpen: false,
@@ -88,29 +92,45 @@ export const useShell = create<ShellState>()((set, get) => ({
     set({ page, paletteOpen: false, settingsOpen: false });
   },
 
-  prefill: (target, account = null) => {
+  prefill: (target, account = null, auto = false) => {
     reflect("launch");
-    set({ pending: target, pendingAccount: account, page: "launch", paletteOpen: false, settingsOpen: false });
+    set({
+      pending: target,
+      pendingAccount: account,
+      pendingAuto: auto,
+      page: "launch",
+      paletteOpen: false,
+      settingsOpen: false,
+    });
   },
 
   readLink: async () => {
     const party = await api.linkTake().catch(() => null);
-    if (!party) return;
+    if (party) {
+      // A job id without a place is not a destination: the launch path parses a place and
+      // an instance together, and nothing else here guesses.
+      const target =
+        party.place && party.server
+          ? `roblox://placeId=${party.place}&gameInstanceId=${party.server}`
+          : party.place
+            ? String(party.place)
+            : null;
+      if (target) {
+        get().prefill(target, party.account);
+        return;
+      }
+    }
 
-    // A job id without a place is not a destination: the launch path parses a place and
-    // an instance together, and nothing else here guesses.
-    const target =
-      party.place && party.server
-        ? `roblox://placeId=${party.place}&gameInstanceId=${party.server}`
-        : party.place
-          ? String(party.place)
-          : null;
-    if (!target) return;
-
-    get().prefill(target, party.account);
+    // A Roblox link. It is a Play press that happened on roblox.com, so the default answer
+    // is to act on it rather than to ask again; the switch in Settings decides otherwise.
+    const raw = await api.nativeTake().catch(() => null);
+    if (!raw) return;
+    const auto = get().settings?.handover.auto !== false;
+    get().prefill(raw, null, auto);
   },
 
   clearPending: () => set({ pending: null, pendingAccount: null }),
+  clearAuto: () => set({ pendingAuto: false }),
 
   openGame: (universe, place) => {
     reflect("game");

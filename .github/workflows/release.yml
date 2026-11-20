@@ -188,6 +188,21 @@ jobs:
             client that opened but never reached a server no longer claims it is joining
             one. A heartbeat re-sends the activity every 30 seconds, which also notices a
             Discord that restarted underneath it.
+
+            ## What is new in 0.3.0
+
+            The launcher Roblox's links open. `roblox://` and `roblox-player:` are the two
+            schemes roblox.com hands Windows when somebody presses Play; turning this on in
+            Settings points both at KURO, so that press lands here instead, with the account,
+            the flag profile and the graphics pin this app already applies. The default is to
+            start the game straight away, because a Play press is already a press.
+
+            Roblox's launcher is not removed or modified. The command it owned is copied into
+            the registry first, and "Give it back", or uninstalling, restores it byte for
+            byte. Roblox re-registers its own handler on every client update, so the takeover
+            is re-stated at each start and the Settings row says when that happened. A link
+            this app cannot read is handed to Roblox's own handler rather than dropped, so a
+            click always ends somewhere, and Studio's own schemes are never touched.
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
