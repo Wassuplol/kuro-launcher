@@ -79,7 +79,7 @@ function AddAccount() {
             type="button"
             onClick={() => void submit()}
             disabled={!value.trim() || adding}
-            className="ui h-8 shrink-0 rounded-control bg-gold px-3 text-[12px] font-semibold text-page hover:bg-[#f0cd7c] disabled:opacity-40"
+            className="ui h-8 shrink-0 rounded-control bg-gold px-3 text-[12px] font-semibold text-page hover:bg-gold-hover disabled:opacity-40"
           >
             {adding ? "Checking" : "Add"}
           </button>
@@ -227,7 +227,7 @@ function AccountRow({ account }: { account: AccountView }) {
               }}
               className={cn(
                 "ui h-7 rounded-control bg-danger-fill px-2.5 text-[12px] font-semibold text-white",
-                "hover:bg-[#b8373b]",
+                "hover:bg-danger-hover",
               )}
             >
               Forget

@@ -287,7 +287,7 @@ export function Tiles({
             <button
               type="button"
               onClick={() => void save()}
-              className="ui h-7 rounded-control bg-gold px-2.5 text-[12px] font-semibold text-page hover:bg-[#f0cd7c]"
+              className="ui h-7 rounded-control bg-gold px-2.5 text-[12px] font-semibold text-page hover:bg-gold-hover"
             >
               {draft.id ? "Save changes" : "Save tile"}
             </button>
@@ -343,7 +343,7 @@ export function Tiles({
                 type="button"
                 onClick={() => void play(tile)}
                 disabled={busy !== null}
-                className="ui h-7 rounded-control bg-gold px-2.5 text-[12px] font-semibold text-page hover:bg-[#f0cd7c] disabled:opacity-40"
+                className="ui h-7 rounded-control bg-gold px-2.5 text-[12px] font-semibold text-page hover:bg-gold-hover disabled:opacity-40"
               >
                 {busy === tile.id ? "Starting" : "Play"}
               </button>

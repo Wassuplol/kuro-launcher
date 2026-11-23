@@ -194,7 +194,7 @@ export function AssistantPanel() {
       </div>
 
       <div className="shrink-0 border-t border-white/8 p-2.5">
-        <div className="flex items-end gap-1.5 rounded-card border border-white/10 bg-page px-2 py-1.5 focus-within:border-gold/40">
+        <div className="flex items-end gap-1.5 rounded-card border border-white/10 bg-page px-2 py-1.5 focus-within:border-gold/60">
           <textarea
             ref={field}
             value={text}

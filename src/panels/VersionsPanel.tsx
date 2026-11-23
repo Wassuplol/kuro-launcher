@@ -197,7 +197,7 @@ function Install() {
         <button
           type="button"
           onClick={() => void install("player", live.upload, method)}
-          className="ui flex h-7 shrink-0 items-center gap-1.5 rounded-control bg-gold px-2.5 text-[12px] font-semibold text-page hover:bg-[#f0cd7c]"
+          className="ui flex h-7 shrink-0 items-center gap-1.5 rounded-control bg-gold px-2.5 text-[12px] font-semibold text-page hover:bg-gold-hover"
         >
           <HardDriveDownload size={13} strokeWidth={1.9} />
           Install
@@ -388,7 +388,7 @@ function InstalledRow({ client }: { client: InstalledClient }) {
                 setConfirming(false);
                 void remove(client.folder);
               }}
-              className="ui h-7 rounded-control bg-danger-fill px-2.5 text-[12px] font-semibold text-white hover:bg-[#b8373b]"
+              className="ui h-7 rounded-control bg-danger-fill px-2.5 text-[12px] font-semibold text-white hover:bg-danger-hover"
             >
               Remove
             </button>
@@ -527,7 +527,7 @@ function Space() {
               <button
                 type="button"
                 onClick={() => void prune()}
-                className="ui h-7 rounded-control bg-danger-fill px-2.5 text-[12px] font-semibold text-white hover:bg-[#b8373b]"
+                className="ui h-7 rounded-control bg-danger-fill px-2.5 text-[12px] font-semibold text-white hover:bg-danger-hover"
               >
                 Remove {plan.remove.length}
               </button>

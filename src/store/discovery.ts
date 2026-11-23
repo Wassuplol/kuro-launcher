@@ -26,7 +26,7 @@ type DiscoveryState = {
   servers: GameServers | null;
   serversLoading: boolean;
   serversProblem: { message: string; detail?: string } | null;
-  loadServers: (place: number) => Promise<void>;
+  loadServers: (place: number, force?: boolean) => Promise<void>;
 };
 
 export const useDiscovery = create<DiscoveryState>()((set, get) => ({
@@ -81,8 +81,12 @@ export const useDiscovery = create<DiscoveryState>()((set, get) => ({
    * The server list. Three calls a minute, so this is only ever called from the
    * Servers tab, and an answer already in hand is not asked for again.
    */
-  loadServers: async (place) => {
-    if (get().servers?.place === place && !get().serversProblem) return;
+  loadServers: async (place, force = false) => {
+    // Three calls a minute is the tightest ceiling in the app after search, so the
+    // cached answer is the default. A control that says "Ask again" has to be able to
+    // mean it, which is what `force` is for: without it the button did nothing and
+    // looked broken.
+    if (!force && get().servers?.place === place && !get().serversProblem) return;
     set({ serversLoading: true, serversProblem: null });
     try {
       set({ servers: await api.discoveryServers(place), serversLoading: false });

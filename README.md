@@ -27,7 +27,8 @@ KURO server, no account to create, and nothing to sign up for.
 ## Get it
 
 Windows 10 and 11, x64. The installers and a portable exe are on the
-[releases page](https://github.com/Wassuplol/kuro-launcher/releases/latest).
+[releases page](https://github.com/Wassuplol/kuro-launcher/releases/latest), and the
+one-page site is at [wassuplol.github.io/kuro-launcher](https://wassuplol.github.io/kuro-launcher/).
 
 The builds are unsigned, so Windows warns once before the installer runs. Every file
 on a release has its SHA-256 in `SHA256SUMS.txt` beside it: put the files in one
@@ -38,7 +39,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | Works | Notes |
 |---|---|
 | **Home** | Roblox's discovery feed, hydrated into tiles: icon, name, players. Six across, live counts |
-| **Stage** | One pad per account on this machine, with the avatar Roblox renders for that account right now, lit when it can start and unlit when it is left off. One press starts every lit pad in the same server, which needs the multi-instance lock and says so before it needs it |
+| **Stage** | One pad per account on this machine, with the avatar Roblox renders for that account right now, lit when it can start and unlit when it is left off. A server can be picked from the place's public list, lowest ping first, and one press starts every lit pad in that exact instance. Two pads need the multi-instance lock, and the page says so before it needs it |
 | **Search** | Games and people from Roblox's index, one deliberate query at a time |
 | **Game page** | Description, visits, rating, max players, and the public server list on a tab |
 | **Library** | The games the account has starred, paged and filterable, and this machine's own record of what it launched |
@@ -89,7 +90,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | A signed installer | No code-signing certificate, so SmartScreen warns once on first run. The hashes are the substitute: check them before you run anything |
 | An updater | The app never phones home for anything but Roblox, so an update is a download, not a push |
 | Studio's links | `roblox-studio` and `roblox-studio-auth` stay with Studio. A place editor is not a game launch, and taking it would be a lie about what this app is |
-| Choosing a server from the stage | A pad is handed the destination's server as it is written in the bar. Picking one from the stage needs the per-server ping and region read that the game page's server tab already does, and a ping number is not worth showing until it is measured per server |
+| Naming a server's region | A public server row carries players, ping and frames, never a region or an address. The address only appears in a join script that needs a ticket, so a map of where servers are would be invented. The ping is measured from this machine, and that is the honest answer |
 | A friend's account as a pad | A pad is an account this machine can start. Putting a friend on one would mean holding their session, which this app will not do, so friends appear as who is on and one press into the server they are in |
 
 ## Six things this app had to measure, not assume

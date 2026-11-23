@@ -302,7 +302,7 @@ export function SettingsPanel() {
                   <button
                     type="button"
                     onClick={forget}
-                    className="ui h-7 rounded-control bg-danger-fill px-2.5 text-[12px] font-semibold text-white hover:bg-[#b8373b]"
+                    className="ui h-7 rounded-control bg-danger-fill px-2.5 text-[12px] font-semibold text-white hover:bg-danger-hover"
                   >
                     Forget
                   </button>
@@ -525,7 +525,7 @@ export function SettingsPanel() {
               <button
                 type="button"
                 onClick={() => void resetSettings()}
-                className="ui mt-3 h-8 rounded-control bg-gold px-3 text-[12px] font-semibold text-page hover:bg-[#f0cd7c]"
+                className="ui mt-3 h-8 rounded-control bg-gold px-3 text-[12px] font-semibold text-page hover:bg-gold-hover"
               >
                 Reset settings
               </button>

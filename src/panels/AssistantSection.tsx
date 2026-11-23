@@ -98,7 +98,7 @@ export function AssistantSection() {
             placeholder={connection?.keySet ? "Stored. Type to replace" : "Paste a key"}
             aria-label="Assistant key"
             autoComplete="off"
-            className="h-7 w-[190px] rounded-control border border-white/10 bg-page px-2 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/40"
+            className="h-7 w-[190px] rounded-control border border-white/10 bg-page px-2 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/60"
           />
           {connection?.keySet ? (
             <button
@@ -121,7 +121,7 @@ export function AssistantSection() {
           onChange={(event) => setBaseUrl(event.target.value)}
           aria-label="Assistant endpoint"
           spellCheck={false}
-          className="h-7 w-[250px] shrink-0 rounded-control border border-white/10 bg-page px-2 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/40"
+          className="h-7 w-[250px] shrink-0 rounded-control border border-white/10 bg-page px-2 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/60"
         />
       </Row>
 
@@ -133,7 +133,7 @@ export function AssistantSection() {
             list="assistant-models"
             aria-label="Assistant model"
             spellCheck={false}
-            className="h-7 w-[190px] rounded-control border border-white/10 bg-page px-2 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/40"
+            className="h-7 w-[190px] rounded-control border border-white/10 bg-page px-2 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/60"
           />
           <datalist id="assistant-models">
             {models.map((id) => (

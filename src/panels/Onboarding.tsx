@@ -234,7 +234,7 @@ export function Onboarding({ onDone }: Props) {
               type="button"
               onClick={next}
               disabled={busy}
-              className="ui h-9 rounded-control bg-gold px-4 text-[13px] font-semibold text-page hover:bg-[#f0cd7c] disabled:opacity-60"
+              className="ui h-9 rounded-control bg-gold px-4 text-[13px] font-semibold text-page hover:bg-gold-hover disabled:opacity-60"
             >
               {last ? "Finish" : "Continue"}
             </button>

@@ -304,7 +304,7 @@ export function LaunchBody() {
             <button
               type="button"
               onClick={() => useShell.getState().go("accounts")}
-              className="ui h-9 w-full rounded-control bg-gold text-[13px] font-semibold text-page hover:bg-[#f0cd7c]"
+              className="ui h-9 w-full rounded-control bg-gold text-[13px] font-semibold text-page hover:bg-gold-hover"
             >
               Add an account
             </button>
@@ -313,7 +313,7 @@ export function LaunchBody() {
               type="button"
               onClick={() => void play()}
               disabled={!ready}
-              className="ui h-9 w-full rounded-control bg-gold text-[13px] font-semibold text-page hover:bg-[#f0cd7c] disabled:opacity-40"
+              className="ui h-9 w-full rounded-control bg-gold text-[13px] font-semibold text-page hover:bg-gold-hover disabled:opacity-40"
             >
               {working ? "Starting" : reading?.mode === "follow" ? "Play and follow" : "Play"}
             </button>

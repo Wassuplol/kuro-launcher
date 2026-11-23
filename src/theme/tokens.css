@@ -9,10 +9,17 @@
   --color-body: #e8eaf0;
   --color-muted: #a8b0c4;
   --color-gold: #e7c169;
+  /* A gold fill lifts one step on hover. Darkening it instead reads as disabled. */
+  --color-gold-hover: #f0cd7c;
   --color-deep-gold: #b8873c;
   --color-success: #8fd9b6;
   --color-danger: #f3a0a0;
   --color-danger-fill: #a62f33;
+  /* The destructive fill lifts on hover for the same reason the gold one does. */
+  --color-danger-hover: #b8373b;
+  /* The title bar's top edge: one step above the page, so the chrome reads as a
+     surface the page sits under rather than another block of it. */
+  --color-chrome: #0d1017;
 
   --font-sans: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
 

@@ -147,7 +147,7 @@ export function LibraryScreen() {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Filter by name or creator"
                   aria-label="Filter your favourites"
-                  className="h-8 w-[220px] rounded-control border border-white/10 bg-panel pr-2.5 pl-7 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/40"
+                  className="h-8 w-[220px] rounded-control border border-white/10 bg-panel pr-2.5 pl-7 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/60"
                 />
               </div>
             ) : null}

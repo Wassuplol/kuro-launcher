@@ -52,7 +52,7 @@ export function GameScreen() {
           <button
             type="button"
             onClick={() => go("home")}
-            className="ui mt-3 h-8 rounded-control bg-gold px-3 text-[11.5px] font-semibold text-page hover:bg-[#f0cd7c]"
+            className="ui mt-3 h-8 rounded-control bg-gold px-3 text-[11.5px] font-semibold text-page hover:bg-gold-hover"
           >
             Back to Home
           </button>
@@ -100,7 +100,7 @@ export function GameScreen() {
             <button
               type="button"
               onClick={() => prefill(String(target.place))}
-              className="ui flex h-9 items-center gap-1.5 rounded-control bg-gold px-3.5 text-[12.5px] font-semibold text-page hover:bg-[#f0cd7c]"
+              className="ui flex h-9 items-center gap-1.5 rounded-control bg-gold px-3.5 text-[12.5px] font-semibold text-page hover:bg-gold-hover"
             >
               <Play size={14} strokeWidth={2} />
               Prepare a launch
@@ -190,7 +190,7 @@ export function GameScreen() {
             </span>
             <button
               type="button"
-              onClick={() => void loadServers(detail?.place ?? target.place)}
+              onClick={() => void loadServers(detail?.place ?? target.place, true)}
               disabled={serversLoading}
               className="ui h-6 rounded-control border border-white/10 px-2 text-[11px] text-muted hover:text-body disabled:opacity-40"
             >

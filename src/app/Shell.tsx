@@ -123,7 +123,7 @@ function TitleBar() {
     <header
       onMouseDown={beginDrag}
       onDoubleClick={() => void win.toggleMaximize()}
-      className="col-span-full flex h-11 items-center gap-3 bg-gradient-to-b from-[#0d1017] to-page pl-4 select-none"
+      className="col-span-full flex h-11 items-center gap-3 bg-gradient-to-b from-chrome to-page pl-4 select-none"
     >
       <span className="flex items-baseline gap-2">
         <span className="text-[12.5px] font-semibold tracking-[0.26em] text-body">KURO</span>

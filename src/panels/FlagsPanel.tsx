@@ -775,7 +775,7 @@ function Write() {
           type="button"
           onClick={() => void apply(account, null)}
           disabled={working || keys === 0 || view.playerRunning}
-          className="ui h-7 rounded-control bg-gold px-2.5 text-[11.5px] font-semibold text-page hover:bg-[#f0cd7c] disabled:opacity-40"
+          className="ui h-7 rounded-control bg-gold px-2.5 text-[11.5px] font-semibold text-page hover:bg-gold-hover disabled:opacity-40"
         >
           {working ? "Writing" : "Write now"}
         </button>

@@ -114,7 +114,7 @@ export function SearchScreen() {
               type="button"
               onClick={() => void run(term, people)}
               disabled={working}
-              className="ui h-8 rounded-control bg-gold px-3 text-[11.5px] font-semibold text-page hover:bg-[#f0cd7c] disabled:opacity-40"
+              className="ui h-8 rounded-control bg-gold px-3 text-[11.5px] font-semibold text-page hover:bg-gold-hover disabled:opacity-40"
             >
               {working ? "Searching" : "Search"}
             </button>

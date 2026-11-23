@@ -163,7 +163,7 @@ export function QuickLogin() {
           type="button"
           onClick={() => void start()}
           disabled={stage === "starting"}
-          className="ui h-8 w-full rounded-control bg-gold text-[12px] font-semibold text-page hover:bg-[#f0cd7c] disabled:opacity-50"
+          className="ui h-8 w-full rounded-control bg-gold text-[12px] font-semibold text-page hover:bg-gold-hover disabled:opacity-50"
         >
           {stage === "starting" ? "Asking Roblox for a code" : "Sign in with a code"}
         </button>

@@ -131,7 +131,7 @@ export function FriendsScreen() {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Filter by name or game"
                   aria-label="Filter your friends"
-                  className="h-8 w-[230px] rounded-control border border-white/10 bg-panel pr-2.5 pl-7 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/40"
+                  className="h-8 w-[230px] rounded-control border border-white/10 bg-panel pr-2.5 pl-7 text-[12px] text-body outline-none placeholder:text-muted/70 focus:border-gold/60"
                 />
               </div>
             ) : null}

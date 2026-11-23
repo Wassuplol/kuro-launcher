@@ -1,0 +1,1167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>KURO, a front door for Roblox</title>
+    <meta
+      name="description"
+      content="A Roblox launcher for Windows. Your accounts stand on pads, one press starts them together in the same server, and the game client is never touched."
+    />
+    <link rel="icon" href="assets/avatar.png" />
+    <style>
+      /*
+       * The page speaks the app's language: the same palette, the same typeface
+       * (Inter Variable, self-hosted so nothing flashes), one lit stage, one accent.
+       * Dial, inherited from DESIGN.md: ENERGY 3 / RHYTHM 3 / MOTION 2.
+       */
+      @font-face {
+        font-family: "Inter Variable";
+        src: url("assets/InterVariable.woff2") format("woff2-variations");
+        font-weight: 100 900;
+        font-display: swap;
+      }
+
+      :root {
+        --page: #0b0d12;
+        --panel: #12141a;
+        --raised: #1a1d25;
+        --body: #e8eaf0;
+        --muted: #a8b0c4;
+        --dim: #7e879b;
+        --gold: #e7c169;
+        --gold-hover: #f0cd7c;
+        --deep-gold: #b8873c;
+        --success: #8fd9b6;
+        --line: rgba(255, 255, 255, 0.08);
+        --line-strong: rgba(255, 255, 255, 0.14);
+        --font: "Inter Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        --micro: 120ms;
+        --settle: 260ms;
+        --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        overflow-x: hidden;
+        background: var(--page);
+        color: var(--body);
+        font-family: var(--font);
+        font-size: 15px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      ::selection {
+        background: rgb(231 193 105 / 0.28);
+        color: var(--body);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--gold);
+        outline-offset: 3px;
+        border-radius: 3px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p,
+      ul {
+        margin: 0;
+      }
+
+      .wrap {
+        width: min(1180px, 100% - 48px);
+        margin-inline: auto;
+      }
+
+      /* ---------- the bar ---------- */
+
+      .bar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: rgb(11 13 18 / 0.82);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .bar__in {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        height: 60px;
+      }
+
+      .mark {
+        display: flex;
+        align-items: baseline;
+        gap: 9px;
+        font-weight: 600;
+        letter-spacing: 0.26em;
+        font-size: 13.5px;
+      }
+
+      .mark i {
+        width: 5px;
+        height: 5px;
+        border-radius: 1px;
+        background: var(--gold);
+        transform: translateY(-3px);
+      }
+
+      .mark span {
+        font-weight: 400;
+        letter-spacing: 0;
+        font-size: 12px;
+        color: var(--dim);
+      }
+
+      .bar__links {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .bar__links a {
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        padding: 0 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        color: var(--muted);
+        transition: color var(--micro) var(--ease), background-color var(--micro) var(--ease);
+      }
+
+      .bar__links a:hover {
+        color: var(--body);
+        background: rgb(255 255 255 / 0.05);
+      }
+
+      .bar__links a.solid {
+        background: var(--gold);
+        color: #14100a;
+        font-weight: 600;
+      }
+
+      .bar__links a.solid:hover {
+        background: var(--gold-hover);
+        color: #14100a;
+      }
+
+      /* ---------- hero ---------- */
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .hero__in {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
+        gap: 40px;
+        align-items: center;
+        padding: 76px 0 84px;
+      }
+
+      .kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+
+      h1 {
+        text-wrap: balance;
+        margin-top: 22px;
+        font-size: clamp(34px, 5.1vw, 60px);
+        line-height: 1.04;
+        letter-spacing: -0.028em;
+        font-weight: 600;
+        max-width: 15ch;
+      }
+
+      h1 em {
+        font-style: normal;
+        color: var(--gold);
+      }
+
+      .lede {
+        margin-top: 22px;
+        max-width: 46ch;
+        font-size: 15.5px;
+        color: var(--muted);
+      }
+
+      .actions {
+        margin-top: 32px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        height: 44px;
+        padding: 0 20px;
+        border-radius: 7px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 1px solid transparent;
+        transition: transform var(--micro) var(--ease), background-color var(--micro) var(--ease),
+          border-color var(--micro) var(--ease), color var(--micro) var(--ease);
+      }
+
+      .btn--gold {
+        background: var(--gold);
+        color: #14100a;
+      }
+
+      .btn--gold:hover {
+        background: var(--gold-hover);
+        transform: translateY(-1px);
+      }
+
+      .btn--quiet {
+        border-color: var(--line-strong);
+        color: var(--muted);
+      }
+
+      .btn--quiet:hover {
+        color: var(--body);
+        background: rgb(255 255 255 / 0.04);
+      }
+
+      .facts {
+        margin-top: 26px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        font-size: 12px;
+        color: var(--dim);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------- the stage, drawn in CSS ---------- */
+
+      .stage {
+        position: relative;
+        aspect-ratio: 1 / 0.94;
+        isolation: isolate;
+      }
+
+      .stage__floor {
+        position: absolute;
+        inset: auto 0 -6% 0;
+        height: 62%;
+        background-image: repeating-linear-gradient(
+            90deg,
+            rgb(255 255 255 / 0.075) 0 1px,
+            transparent 1px 64px
+          ),
+          repeating-linear-gradient(0deg, rgb(255 255 255 / 0.055) 0 1px, transparent 1px 52px);
+        transform: perspective(520px) rotateX(61deg);
+        transform-origin: 50% 100%;
+        mask-image: linear-gradient(to top, #000 0%, rgb(0 0 0 / 0.7) 44%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to top, #000 0%, rgb(0 0 0 / 0.7) 44%, transparent 100%);
+        /*
+         * The grid is the product's own stage floor, not texture for its own sake: the
+         * app's Stage page is the one lit plane in the window, and this is that plane.
+         */
+      }
+
+      .stage__pool {
+        position: absolute;
+        left: 50%;
+        bottom: 12%;
+        width: 92%;
+        height: 54%;
+        transform: translateX(-50%);
+        background: radial-gradient(
+          ellipse at 50% 72%,
+          rgb(231 193 105 / 0.14),
+          rgb(231 193 105 / 0.035) 46%,
+          transparent 72%
+        );
+      }
+
+      .pad {
+        position: absolute;
+        left: 50%;
+        bottom: 13%;
+        width: 34%;
+        height: 40px;
+        transform: translateX(-50%);
+        border-radius: 50%;
+        background: radial-gradient(
+          ellipse at 50% 45%,
+          rgb(143 217 182 / 0.32),
+          rgb(143 217 182 / 0.06) 52%,
+          transparent 74%
+        );
+        box-shadow: inset 0 0 0 1px rgb(231 193 105 / 0.34);
+      }
+
+      .pad--empty {
+        left: auto;
+        right: 2%;
+        width: 26%;
+        transform: none;
+        background: radial-gradient(ellipse at 50% 45%, rgb(231 193 105 / 0.1), transparent 72%);
+        box-shadow: none;
+        border: 1px dashed rgb(184 135 60 / 0.6);
+      }
+
+      /* The pad's centre line is at 13% + half its 40px height, and the avatar's soles
+         are placed on that same line. The contact shadow sits there too: a shadow that
+         hangs lower reads as an object under a hovering figure. */
+      .plus {
+        position: absolute;
+        right: calc(2% + 13% - 9px);
+        bottom: calc(13% + 12px);
+        width: 18px;
+        height: 18px;
+        color: rgb(184 135 60 / 0.85);
+      }
+
+      .plus::before,
+      .plus::after {
+        content: "";
+        position: absolute;
+        background: currentColor;
+        border-radius: 1px;
+      }
+
+      .plus::before {
+        left: 0;
+        right: 0;
+        top: 8px;
+        height: 1.5px;
+      }
+
+      .plus::after {
+        top: 0;
+        bottom: 0;
+        left: 8px;
+        width: 1.5px;
+      }
+
+      .shadow {
+        position: absolute;
+        left: 50%;
+        bottom: calc(13% + 15px);
+        width: 15%;
+        height: 10px;
+        transform: translateX(-50%);
+        border-radius: 50%;
+        background: radial-gradient(
+          ellipse at 50% 50%,
+          rgb(0 0 0 / 0.7),
+          rgb(0 0 0 / 0.28) 58%,
+          transparent 78%
+        );
+      }
+
+      .figure {
+        position: absolute;
+        left: 50%;
+        bottom: 14.2%;
+        width: 30%;
+        transform: translateX(-50%);
+        filter: drop-shadow(0 10px 12px rgb(0 0 0 / 0.6)) drop-shadow(0 26px 24px rgb(0 0 0 / 0.42));
+        animation: breathe 7s ease-in-out infinite;
+      }
+
+      .who {
+        position: absolute;
+        left: 50%;
+        top: 3.5%;
+        transform: translateX(-50%);
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .who b {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .who i {
+        display: block;
+        margin-top: 3px;
+        font-style: normal;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--success);
+      }
+
+      .who--empty {
+        right: 6%;
+        left: auto;
+        top: 3.5%;
+        transform: none;
+      }
+
+      .who--empty i {
+        color: var(--dim);
+      }
+
+      @keyframes breathe {
+        0%,
+        100% {
+          transform: translate(-50%, 0);
+        }
+        50% {
+          transform: translate(-50%, -5px);
+        }
+      }
+
+      /* ---------- generic section ---------- */
+
+      section {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .section__in {
+        padding: 78px 0;
+      }
+
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+
+      h2 {
+        text-wrap: balance;
+        margin-top: 14px;
+        font-size: clamp(24px, 3vw, 34px);
+        line-height: 1.12;
+        letter-spacing: -0.022em;
+        font-weight: 600;
+        max-width: 22ch;
+      }
+
+      .sub {
+        margin-top: 14px;
+        max-width: 62ch;
+        color: var(--muted);
+        font-size: 14.5px;
+      }
+
+      /* ---------- the window: a defined list, not a card grid ---------- */
+
+      .parts {
+        margin-top: 44px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 56px;
+        border-top: 1px solid var(--line);
+      }
+
+      .part {
+        display: grid;
+        grid-template-columns: 116px minmax(0, 1fr);
+        gap: 18px;
+        padding: 17px 0;
+        border-bottom: 1px solid var(--line);
+        align-items: baseline;
+      }
+
+      .part dt {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--body);
+      }
+
+      .part dd {
+        margin: 0;
+        font-size: 13.5px;
+        color: var(--muted);
+      }
+
+      /* ---------- the screenshot section ---------- */
+
+      .shot {
+        position: relative;
+        margin: 40px 0 0;
+        border: 1px solid var(--line-strong);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--panel);
+        box-shadow: 0 40px 80px -48px rgb(0 0 0 / 0.9);
+      }
+
+      /* One band that runs edge to edge: the screenshot is the evidence, and a 1180 box
+         made it a thumbnail. Body hides horizontal overflow, so the breakout is safe. */
+      .shot--bleed {
+        width: 100%;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+        box-shadow: none;
+        margin-top: 54px;
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .shot__note {
+        position: absolute;
+        right: 14px;
+        bottom: 14px;
+        padding: 7px 11px;
+        border-radius: 6px;
+        background: rgb(11 13 18 / 0.82);
+        border: 1px solid var(--line);
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+
+      .caption {
+        margin-top: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        font-size: 12.5px;
+        color: var(--dim);
+      }
+
+      .caption b {
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      /* ---------- the refusal block: narrow, quiet, different rhythm ---------- */
+
+      .refuse .section__in {
+        padding: 92px 0;
+      }
+
+      .refuse__in {
+        max-width: 720px;
+        margin-inline: auto;
+        text-align: center;
+      }
+
+      .refuse h2 {
+        max-width: none;
+      }
+
+      .refuse ul {
+        margin: 34px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 18px;
+        text-align: left;
+      }
+
+      .refuse li {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr);
+        gap: 14px;
+        font-size: 14.5px;
+        color: var(--muted);
+      }
+
+      .refuse li::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        margin-top: 9px;
+        border-radius: 1px;
+        background: var(--deep-gold);
+      }
+
+      .refuse li b {
+        color: var(--body);
+        font-weight: 600;
+      }
+
+      /* ---------- install ---------- */
+
+      .install__in {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+        gap: 48px;
+      }
+
+      .files {
+        margin-top: 30px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .file {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        height: 54px;
+        padding: 0 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgb(18 20 26 / 0.7);
+        transition: border-color var(--micro) var(--ease), background-color var(--micro) var(--ease);
+      }
+
+      .file:hover {
+        border-color: var(--line-strong);
+        background: var(--panel);
+      }
+
+      .file b {
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+
+      .file span {
+        font-size: 12px;
+        color: var(--dim);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .note {
+        border-left: 1px solid var(--line);
+        padding-left: 26px;
+        font-size: 13.5px;
+        color: var(--muted);
+      }
+
+      .note h3 {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+
+      .note p + p {
+        margin-top: 12px;
+      }
+
+      .note code {
+        font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        font-size: 12px;
+        color: var(--muted);
+        background: rgb(255 255 255 / 0.05);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+
+      /* ---------- not built ---------- */
+
+      code {
+        font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        font-size: 12px;
+        color: var(--body);
+        background: rgb(255 255 255 / 0.06);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+
+      .gaps {
+        margin-top: 30px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 28px;
+      }
+
+      .gap h3 {
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+
+      .gap p {
+        margin-top: 7px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      /* ---------- footer ---------- */
+
+      footer {
+        padding: 44px 0 56px;
+      }
+
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px 28px;
+        align-items: baseline;
+        justify-content: space-between;
+        font-size: 12.5px;
+        color: var(--dim);
+      }
+
+      .foot a {
+        color: var(--muted);
+        border-bottom: 1px solid transparent;
+        transition: color var(--micro) var(--ease), border-color var(--micro) var(--ease);
+      }
+
+      .foot a:hover {
+        color: var(--body);
+        border-bottom-color: var(--line-strong);
+      }
+
+      .foot__links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+      }
+
+      /* ---------- reveals ---------- */
+
+      .reveal {
+        transition: opacity 520ms var(--ease), transform 520ms var(--ease);
+      }
+
+      /* Only a page that can run the observer is allowed to start hidden, and only a
+         visitor who has not asked for less motion. */
+      @media (prefers-reduced-motion: no-preference) {
+        .js .reveal {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+      }
+
+      .js .reveal.is-in {
+        opacity: 1;
+        transform: none;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        .reveal,
+        .js .reveal {
+          opacity: 1;
+          transform: none;
+          transition: none;
+        }
+        .figure {
+          animation: none;
+        }
+      }
+
+      /* ---------- narrow ---------- */
+
+      @media (max-width: 980px) {
+        .hero__in {
+          grid-template-columns: 1fr;
+          gap: 28px;
+          padding: 56px 0 64px;
+        }
+        .stage {
+          max-width: 460px;
+        }
+        .parts {
+          grid-template-columns: 1fr;
+          column-gap: 0;
+        }
+        .install__in {
+          grid-template-columns: 1fr;
+          gap: 34px;
+        }
+        .note {
+          border-left: 0;
+          border-top: 1px solid var(--line);
+          padding: 26px 0 0;
+        }
+        code {
+        font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        font-size: 12px;
+        color: var(--body);
+        background: rgb(255 255 255 / 0.06);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+
+      .gaps {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .wrap {
+          width: min(1180px, 100% - 32px);
+        }
+        .bar__links a {
+          height: 44px;
+        }
+        .bar__links a:not(.solid) {
+          display: none;
+        }
+        h1 {
+          font-size: clamp(30px, 9vw, 40px);
+        }
+        .part {
+          grid-template-columns: 96px minmax(0, 1fr);
+        }
+        .btn {
+          height: 48px;
+          width: 100%;
+          justify-content: center;
+        }
+        .shot__note {
+          display: none;
+        }
+        .who--empty {
+          display: none;
+        }
+        .who i {
+          font-size: 10.5px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="bar">
+      <div class="wrap bar__in">
+        <a class="mark" href="#top" aria-label="KURO, back to the top">
+          KURO <i aria-hidden></i> <span>for Roblox</span>
+        </a>
+        <nav class="bar__links" aria-label="Main">
+          <a href="#window">The window</a>
+          <a href="#stage">The stage</a>
+          <a href="#install">Install</a>
+          <a class="solid" href="#install">Download</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="wrap hero__in">
+          <div>
+            <p class="kicker">Windows 10 and 11, Tauri, Rust</p>
+            <h1>A Roblox launcher that never touches Roblox.</h1>
+            <p class="lede">
+              Your accounts stand on pads. One press starts them together in the same server. It
+              reads the same public API the website reads, mints a login ticket for one account,
+              and runs the client Windows would have run.
+            </p>
+            <div class="actions">
+              <a class="btn btn--gold" href="#install">Download for Windows</a>
+              <a class="btn btn--quiet" href="https://github.com/Wassuplol/kuro-launcher">
+                Read the source
+              </a>
+            </div>
+            <p class="facts">
+              <span>v0.3.0</span>
+              <span>MIT</span>
+              <span>9.7 MB portable exe</span>
+              <span>126 Rust tests</span>
+            </p>
+          </div>
+
+          <div class="stage" aria-hidden="true">
+            <div class="stage__floor"></div>
+            <div class="stage__pool"></div>
+            <div class="pad"></div>
+            <div class="pad pad--empty"></div>
+            <div class="plus"></div>
+            <div class="shadow"></div>
+            <img
+              class="figure"
+              src="assets/avatar.png"
+              alt=""
+              width="420"
+              height="420"
+              loading="eager"
+              decoding="async"
+            />
+            <div class="who"><b>Your account</b><i>ready</i></div>
+            <div class="who who--empty"><b>Open pad</b><i>add an account</i></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="window">
+        <div class="wrap section__in">
+          <p class="eyebrow reveal">The window</p>
+          <h2 class="reveal">Nine pages, each with one job.</h2>
+          <p class="sub reveal">
+            It is not a browser pointed at roblox.com. Every page answers a question the website
+            cannot, because the answer is on this machine.
+          </p>
+
+          <dl class="parts reveal">
+            <div class="part">
+              <dt>Home</dt>
+              <dd>Roblox's own discovery feed, dense, six tiles across, with live player counts.</dd>
+            </div>
+            <div class="part">
+              <dt>Stage</dt>
+              <dd>One pad per account, the avatar Roblox renders for it now, and one press that starts them all.</dd>
+            </div>
+            <div class="part">
+              <dt>Search</dt>
+              <dd>One deliberate query at a time, games and people, with the budget Roblox allows.</dd>
+            </div>
+            <div class="part">
+              <dt>Library</dt>
+              <dd>What the account starred, and this machine's own record of what it launched.</dd>
+            </div>
+            <div class="part">
+              <dt>Sessions</dt>
+              <dd>Every launch whose log is still here: where it went, how long it lasted, why it stopped.</dd>
+            </div>
+            <div class="part">
+              <dt>Launch</dt>
+              <dd>A place, a link, a private invite, a friend's server. One client at a time, idempotent.</dd>
+            </div>
+            <div class="part">
+              <dt>Accounts</dt>
+              <dd>Sign in with a six-character code, sessions sealed by Windows DPAPI, health checked.</dd>
+            </div>
+            <div class="part">
+              <dt>Flags</dt>
+              <dd>Roblox's own 25,000-key catalogue, written as a lease that is restored when the client exits.</dd>
+            </div>
+            <div class="part">
+              <dt>Versions</dt>
+              <dd>Both install roots, hash checked, pinned, pruned, verified, repaired.</dd>
+            </div>
+          </dl>
+
+          <p class="sub reveal" style="margin-top: 26px">
+            And one strip that floats over the game: the server the client actually reached, and how
+            long the join took.
+          </p>
+        </div>
+      </section>
+
+      <section id="stage">
+        <div class="wrap section__in">
+          <p class="eyebrow reveal">The signature surface</p>
+          <h2 class="reveal">Every account on a pad, every pad in the same server.</h2>
+          <p class="sub reveal">
+            The stage is the page a website cannot build. It knows which accounts exist on this
+            machine, which of them is free, and which client is about to start.
+          </p>
+        </div>
+
+        <figure class="shot shot--bleed reveal">
+          <img
+            src="assets/stage.webp"
+            alt="The Stage page: one account on a lit pad, an open pad beside it, a list of friends who are on, and a launch bar naming the destination"
+            width="1400"
+            height="875"
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption class="shot__note">The Stage, one account and one open pad</figcaption>
+        </figure>
+
+        <div class="wrap">
+          <p class="caption reveal">
+            <span><b>Sequential by design:</b> two bootstrappers on one install write the same files.</span>
+            <span><b>Three calls a minute:</b> the server list is read once and reused.</span>
+            <span><b>Per pad:</b> a refusal names the pad it belongs to.</span>
+          </p>
+
+          <figure class="shot reveal">
+            <img
+              src="assets/servers.webp"
+              alt="The server picker: public servers with players, server id and ping, lowest ping first"
+              width="1200"
+              height="750"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption class="shot__note">Picking one server for every pad</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="refuse">
+        <div class="wrap section__in">
+          <div class="refuse__in">
+            <p class="eyebrow reveal">The line</p>
+            <h2 class="reveal">What it refuses to do.</h2>
+            <ul class="reveal">
+              <li>
+                <span><b>It does not modify the client.</b> No injection, no memory reads, no patched
+                files. The executable it runs is byte-identical to the one Roblox installed.</span>
+              </li>
+              <li>
+                <span><b>It does not ship your session.</b> A cookie is unsealed inside one Rust call,
+                used there, and sealed again with Windows DPAPI. It never reaches the page.</span>
+              </li>
+              <li>
+                <span><b>It does not hide a paywall.</b> A paid game's price stands on its tile, in
+                search and on its page, before anything starts.</span>
+              </li>
+              <li>
+                <span><b>It does not phone home.</b> The only calls are the ones a page you opened
+                would make, unless you turn on the assistant and give it an endpoint.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="install">
+        <div class="wrap section__in install__in">
+          <div>
+            <p class="eyebrow reveal">Install</p>
+            <h2 class="reveal">Three files, one hash sheet.</h2>
+            <p class="sub reveal">
+              Windows 10 or 11 with the WebView2 runtime, which most machines already have. The
+              portable exe needs no installer at all.
+            </p>
+
+            <div class="files reveal">
+              <a
+                class="file"
+                href="https://github.com/Wassuplol/kuro-launcher/releases/latest/download/Kuro-Launcher_0.3.0_x64-setup.exe"
+              >
+                <b>Installer</b><span>3.2 MB</span>
+              </a>
+              <a
+                class="file"
+                href="https://github.com/Wassuplol/kuro-launcher/releases/latest/download/Kuro-Launcher_0.3.0_x64_en-US.msi"
+              >
+                <b>MSI package</b><span>4.3 MB</span>
+              </a>
+              <a
+                class="file"
+                href="https://github.com/Wassuplol/kuro-launcher/releases/latest/download/kuro-launcher.exe"
+              >
+                <b>Portable exe</b><span>9.7 MB</span>
+              </a>
+              <a
+                class="file"
+                href="https://github.com/Wassuplol/kuro-launcher/releases/latest/download/SHA256SUMS.txt"
+              >
+                <b>SHA-256 sums</b><span>every file above</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="note reveal">
+            <h3>Before you run it</h3>
+            <p>
+              The builds are unsigned, so Windows warns once on first run. That is a code-signing
+              certificate this project does not have, not a sign of anything wrong with the file.
+            </p>
+            <p>
+              Every file has its hash beside it. Put the downloads in one folder and run
+              <code>sha256sum -c SHA256SUMS.txt</code> before you run anything else.
+            </p>
+            <p>
+              It replaces Roblox's own <code>roblox://</code> handler only if you ask it to, from
+              Settings, and gives it back from the same row or on uninstall.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap section__in">
+          <p class="eyebrow reveal">Not built yet</p>
+          <h2 class="reveal">What is missing, and why.</h2>
+          <div class="gaps">
+            <div class="gap reveal">
+              <h3>A signed installer</h3>
+              <p>
+                No code-signing certificate, so SmartScreen warns once. The hash sheet is the
+                substitute: check it before you run anything.
+              </p>
+            </div>
+            <div class="gap reveal">
+              <h3>An updater</h3>
+              <p>
+                The app never phones home for anything but Roblox, so an update is a download, not a
+                push.
+              </p>
+            </div>
+            <div class="gap reveal">
+              <h3>Studio's links</h3>
+              <p>
+                <code>roblox-studio</code> and its auth scheme stay with Studio. An edit launch is not
+                a game, and taking it would be a lie about what this app is.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap foot">
+        <span>KURO, MIT, by Mem. Not affiliated with Roblox Corporation.</span>
+        <span class="foot__links">
+          <a href="https://github.com/Wassuplol/kuro-launcher">Source</a>
+          <a href="https://github.com/Wassuplol/kuro-launcher/releases">Releases</a>
+          <a href="./join/">Invite page</a>
+          <a href="https://github.com/Wassuplol/kuro-launcher/blob/main/README.md">README</a>
+        </span>
+      </div>
+    </footer>
+
+    <script>
+      // Reveals: one observer, one class, nothing looping. The motion dial is 2, so a block
+      // arrives once and stays. Reduced motion turns the whole thing off in CSS, and a
+      // browser without this script never hides a block in the first place.
+      document.documentElement.classList.add("js");
+      const blocks = document.querySelectorAll(".reveal");
+      if ("IntersectionObserver" in window) {
+        const seen = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+              entry.target.classList.add("is-in");
+              seen.unobserve(entry.target);
+            }
+          },
+          { rootMargin: "0px 0px -12% 0px", threshold: 0.08 },
+        );
+        blocks.forEach((block, index) => {
+          block.style.transitionDelay = `${Math.min(index % 6, 5) * 55}ms`;
+          seen.observe(block);
+        });
+      } else {
+        blocks.forEach((block) => block.classList.add("is-in"));
+      }
+    </script>
+  </body>
+</html>

@@ -290,7 +290,7 @@ export function Opening({ target, onDone }: Props) {
           className="absolute inset-0 h-full w-full -rotate-90"
           aria-hidden
         >
-          <circle cx="58" cy="58" r="55" fill="none" stroke="#B8873C" strokeWidth="1.25" />
+          <circle cx="58" cy="58" r="55" fill="none" stroke="#b8873c" strokeWidth="1.25" />
         </svg>
         <div className="rounded-full bg-page p-[3px]">
           <img
