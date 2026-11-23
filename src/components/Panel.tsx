@@ -67,9 +67,7 @@ export function Section({
         <h2 className="label">{title}</h2>
         {aside}
       </div>
-      <div className="mt-2 overflow-hidden rounded-card border border-white/8 bg-page/50">
-        {children}
-      </div>
+      <div className="surface mt-2 overflow-hidden">{children}</div>
     </section>
   );
 }

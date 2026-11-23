@@ -39,17 +39,28 @@ export function RailItem({ label, shortcut, icon: Icon, active, bar = true, onCl
           aria-current={active ? "page" : undefined}
           onClick={onClick}
           className={cn(
-            "ui relative flex h-11 w-11 items-center justify-center rounded-control",
-            active ? "bg-white/5 text-gold" : "text-muted hover:bg-white/5 hover:text-body",
+            "ui group relative flex h-11 w-11 items-center justify-center rounded-control",
+            active ? "text-gold" : "text-muted hover:text-body",
           )}
         >
+          {active ? (
+            <span
+              aria-hidden
+              className="bloom pointer-events-none absolute inset-0 rounded-control"
+            />
+          ) : (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-control opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:bg-white/[0.04]"
+            />
+          )}
           {active && bar ? (
             <span
               aria-hidden
               className="absolute -left-2 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r-full bg-gold"
             />
           ) : null}
-          <Icon ref={iconRef} size={20} strokeWidth={1.6} />
+          <Icon ref={iconRef} size={20} strokeWidth={1.6} className="relative" />
         </button>
       </Tooltip.Trigger>
       <Tooltip.Portal>

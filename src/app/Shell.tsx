@@ -117,25 +117,23 @@ function TitleBar() {
     <header
       onMouseDown={beginDrag}
       onDoubleClick={() => void win.toggleMaximize()}
-      className="col-span-full flex h-11 items-center gap-3 border-b border-white/8 bg-page pl-4 select-none"
+      className="col-span-full flex h-11 items-center gap-3 bg-gradient-to-b from-[#0d1017] to-page pl-4 select-none"
     >
-      <span className="text-[13px] font-medium tracking-[0.14em] text-body">
-        KURO
+      <span className="flex items-baseline gap-2">
+        <span className="text-[12.5px] font-semibold tracking-[0.26em] text-body">KURO</span>
+        <span aria-hidden className="mb-[3px] h-[5px] w-[5px] rounded-[1px] bg-gold/70" />
       </span>
-      <span aria-hidden className="h-3 w-px bg-white/12" />
-      <span className="text-[12px] text-muted">
-        {PAGE_LABEL[page]}
-      </span>
+      <span className="text-[12px] text-[var(--dim)]">{PAGE_LABEL[page]}</span>
 
       <div className="ml-auto flex h-full items-stretch">
         <RobuxPill />
         <button
           type="button"
           onClick={openPalette}
-          className="ui my-auto mr-3 flex h-6 items-center gap-1.5 rounded-control border border-white/8 px-2 text-[11px] text-muted hover:border-white/16 hover:text-body"
+          className="ui my-auto mr-3 flex h-6 items-center gap-1.5 rounded-control px-2 text-[11px] text-[var(--dim)] hover:bg-white/5 hover:text-body"
         >
           Commands
-          <span className="num text-muted">Ctrl K</span>
+          <span className="num text-[var(--dim)]">Ctrl K</span>
         </button>
         <WindowControls />
       </div>
@@ -154,7 +152,7 @@ function Rail() {
   return (
     <nav
       aria-label="Main"
-      className="row-start-2 flex flex-col items-center gap-1 overflow-y-auto border-r border-white/8 pt-3 pb-3"
+      className="row-start-2 flex flex-col items-center gap-1 overflow-y-auto pt-3 pb-3"
     >
       <Tooltip.Provider delayDuration={400}>
         {RAIL.map((item) => (
@@ -168,7 +166,7 @@ function Rail() {
           />
         ))}
 
-        <span aria-hidden className="my-1.5 h-px w-6 shrink-0 bg-white/10" />
+        <span aria-hidden className="my-2 h-px w-5 shrink-0 bg-white/8" />
 
         {TOOLS.map((tool) => (
           <RailItem
@@ -209,7 +207,7 @@ function PageOutlet() {
   return (
     <motion.div
       key={page}
-      initial={reduced ? false : { opacity: 0, y: 4 }}
+      initial={reduced ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={ENTER}
       className="h-full"
@@ -266,12 +264,12 @@ export function Shell() {
     <div
       className={cn(
         "grid h-full w-full grid-rows-[44px_1fr] overflow-hidden bg-page",
-        assistantOpen ? "grid-cols-[60px_1fr_360px]" : "grid-cols-[60px_1fr]",
+        assistantOpen ? "grid-cols-[64px_1fr_360px]" : "grid-cols-[64px_1fr]",
       )}
     >
       <TitleBar />
       <Rail />
-      <main className="relative min-w-0 overflow-hidden">
+      <main className="veil relative min-w-0 overflow-hidden">
         <PageOutlet />
       </main>
       {assistantOpen ? <AssistantPanel /> : null}

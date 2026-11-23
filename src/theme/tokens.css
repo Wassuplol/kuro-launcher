@@ -37,15 +37,21 @@
 
   --line: rgb(255 255 255 / 0.08);
   --line-strong: rgb(255 255 255 / 0.14);
+  /* The third text step. Measured, not picked: #7e879b is 5.39:1 on the page and
+     5.11:1 on a panel, so a hint can be quiet without failing the floor. */
+  --dim: #7e879b;
 
-  --rail: 60px;
+  --rail: 64px;
   --header: 44px;
   --row: 40px;
 
   --micro: 120ms;
   --enter: 180ms;
   --settle: 260ms;
+  --lift: 200ms;
+  --reveal: 340ms;
   --ease-kuro: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
 @layer base {
@@ -124,6 +130,35 @@
     transition-timing-function: var(--ease-kuro);
   }
 
+  /* The one card shape. A hairline, a top highlight that reads as the lip of a
+     raised surface, and no shadow: depth comes from the edge, not from a blur. */
+  .surface {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: color-mix(in srgb, var(--panel) 72%, transparent);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  }
+
+  /* The light pool the stage sits in. Painted once per page, never per row. */
+  .veil::before {
+    content: "";
+    position: absolute;
+    inset: -10% -10% auto;
+    height: 420px;
+    pointer-events: none;
+    background: radial-gradient(
+      720px 380px at 50% 0%,
+      rgb(231 193 105 / 0.07),
+      transparent 68%
+    );
+  }
+
+  /* A glyph that is live gets the same light a pad gets. */
+  .bloom {
+    background: radial-gradient(circle at 50% 50%, rgb(231 193 105 / 0.22), transparent 70%);
+    box-shadow: inset 0 0 0 1px rgb(231 193 105 / 0.10);
+  }
+
   .num {
     font-variant-numeric: tabular-nums;
   }
@@ -132,6 +167,14 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--muted);
+  }
+
+  /* A text field shows focus on its own edge with a one pixel halo. The full ring
+     is for buttons, where the whole control is the target. */
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 1px solid var(--gold);
+    outline-offset: 1px;
   }
 
   /* cmdk renders plain elements with data attributes, so its states live here. */

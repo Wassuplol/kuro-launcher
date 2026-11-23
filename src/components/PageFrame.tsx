@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+
+import { cn } from "../lib/cn";
 
 /**
  * The chrome for a page that lives in the main area.
@@ -21,26 +23,58 @@ export function PageFrame({
   wide?: boolean;
   children: ReactNode;
 }) {
+  const scroller = useRef<HTMLDivElement>(null);
+
+  // A page opens at its top. WebView2 restores the scroll offset of a scroller it has
+  // seen before, so a second visit could land halfway down a page whose heading is
+  // fixed above content that had already been scrolled past.
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: 0 });
+  }, []);
+
   return (
     <div className="flex h-full flex-col">
-      <header className="shrink-0 border-b border-white/8 px-8 pt-6 pb-5">
-        <div className="flex items-start justify-between gap-6">
-          <div className="min-w-0">
-            <h1 className="text-[20px] font-semibold tracking-[-0.015em] text-body">{title}</h1>
-            {subtitle ? (
-              <p className="mt-1 max-w-[64ch] text-[12.5px] leading-[1.55] text-muted">
-                {subtitle}
-              </p>
-            ) : null}
+      <header
+        className={cn(
+          "relative shrink-0 pt-7 pb-5 pl-8",
+          // The page scroller reserves a scrollbar gutter, so the header has to
+          // reserve the same one or the centred column lands five pixels off.
+          wide ? "pr-8" : "pr-[42px]",
+        )}
+      >
+        <div className={wide ? "" : "mx-auto w-full max-w-[820px]"}>
+          <div className="flex items-start justify-between gap-6">
+            <div className="min-w-0">
+              <h1 className="text-[26px] leading-[1.1] font-semibold tracking-[-0.022em] text-body">
+                {title}
+              </h1>
+              {subtitle ? (
+                <p className="mt-2 max-w-[62ch] text-[12.5px] leading-[1.6] text-muted">
+                  {subtitle}
+                </p>
+              ) : null}
+            </div>
+            {aside ? <div className="shrink-0 pt-1">{aside}</div> : null}
           </div>
-          {aside ? <div className="shrink-0">{aside}</div> : null}
         </div>
+        {/* A rule that fades out instead of a border that runs edge to edge: the
+            page then has no box around it, which is the whole point of the veil. */}
+        <span
+          aria-hidden
+          className={cn(
+            "absolute bottom-0 h-px bg-gradient-to-r from-white/10 via-white/5 to-transparent",
+            wide ? "inset-x-8" : "left-1/2 w-full max-w-[820px] -translate-x-1/2",
+          )}
+        />
       </header>
 
       {/* Anchor off: a feed that fills in after mount would otherwise drag the
           viewport down as thumbnails arrive, which reads as the page scrolling
           itself. */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-14 [overflow-anchor:none]">
+      <div
+        ref={scroller}
+        className="min-h-0 flex-1 overflow-y-auto px-8 pb-16 [overflow-anchor:none] [scrollbar-gutter:stable]"
+      >
         <div className={wide ? "w-full" : "mx-auto w-full max-w-[820px]"}>{children}</div>
       </div>
     </div>
