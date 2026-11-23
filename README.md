@@ -38,6 +38,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | Works | Notes |
 |---|---|
 | **Home** | Roblox's discovery feed, hydrated into tiles: icon, name, players. Six across, live counts |
+| **Stage** | One pad per account on this machine, with the avatar Roblox renders for that account right now, lit when it can start and unlit when it is left off. One press starts every lit pad in the same server, which needs the multi-instance lock and says so before it needs it |
 | **Search** | Games and people from Roblox's index, one deliberate query at a time |
 | **Game page** | Description, visits, rating, max players, and the public server list on a tab |
 | **Library** | The games the account has starred, paged and filterable, and this machine's own record of what it launched |
@@ -54,7 +55,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | **Roblox links** | `roblox://` and `roblox-player:` pointed at this app, so a Play press on roblox.com opens the game here. Roblox's own launcher comes back when it is turned off, or on uninstall |
 | **Over the game** | An always-on-top strip naming the server the client actually reached, and how long the join took |
 | **Graphics** | A GPU preference written for the exact client executable, re-applied when Roblox installs a new version folder |
-| **Shell** | Eight pages, a command palette, settings, named failures with a code, a cause and an action |
+| **Shell** | Nine pages, a command palette, settings, named failures with a code, a cause and an action |
 | **Install** | NSIS and MSI installers and a portable exe, built by CI on a tag, with SHA-256 for every file |
 
 <p align="center">
@@ -67,6 +68,10 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 
 <p align="center">
   <img src="assets/sessions.webp" alt="The Sessions page: every launch this machine has a log for, and what the client wrote down when it stopped" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/stage.webp" alt="The Stage: one pad per account, the avatar Roblox renders now, and one press that hands every lit pad the same destination" width="100%">
 </p>
 
 <p align="center">
@@ -84,6 +89,8 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | A signed installer | No code-signing certificate, so SmartScreen warns once on first run. The hashes are the substitute: check them before you run anything |
 | An updater | The app never phones home for anything but Roblox, so an update is a download, not a push |
 | Studio's links | `roblox-studio` and `roblox-studio-auth` stay with Studio. A place editor is not a game launch, and taking it would be a lie about what this app is |
+| Choosing a server from the stage | A pad is handed the destination's server as it is written in the bar. Picking one from the stage needs the per-server ping and region read that the game page's server tab already does, and a ping number is not worth showing until it is measured per server |
+| A friend's account as a pad | A pad is an account this machine can start. Putting a friend on one would mean holding their session, which this app will not do, so friends appear as who is on and one press into the server they are in |
 
 ## Six things this app had to measure, not assume
 
@@ -149,7 +156,7 @@ src-tauri/src/
   assistant.rs the forwarded conversation: resolved config, SSE streaming, the prompt
   error.rs     every failure has a code, a cause and an action
 src/
-  screens/     Home, Search, Game, Launch, Accounts, Flags, Versions, Library, Friends, Sessions
+  screens/     Home, Stage, Search, Game, Launch, Accounts, Flags, Versions, Library, Friends, Sessions
   panels/      the bodies of those pages, plus the palette and settings drawers
   store/       zustand: shell, accounts, versions, flags, discovery, library
 tools/

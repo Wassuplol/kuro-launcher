@@ -1,9 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Command } from "cmdk";
-import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, History, Home, Library, MessagesSquare, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, CornerDownLeft, FolderOpen, History, Home, Library, MessagesSquare, PackageCheck, Play, RotateCcw, Search, Settings, SlidersHorizontal, UserRound, Users, UsersRound } from "lucide-react";
 import { motion } from "motion/react";
 
-import { PAGE_LABEL, PAGES } from "../app/router";
+import { PAGE_LABEL, PAGE_SHORTCUT, PAGES } from "../app/router";
 import { ENTER } from "../lib/motion";
 import { useShell } from "../store/shell";
 
@@ -14,6 +14,7 @@ const ICONS = {
   sessions: History,
   friends: Users,
   launch: Play,
+  stage: UsersRound,
   accounts: UserRound,
   flags: SlidersHorizontal,
   versions: PackageCheck,
@@ -26,6 +27,7 @@ const ICONS = {
  */
 const KEYWORDS: Record<(typeof PAGES)[number], string> = {
   home: "start overview",
+  stage: "squad party pad accounts launch together",
   search: "find games people",
   library: "saved shelf",
   sessions: "logs receipts history crash why did it crash session record",
@@ -81,8 +83,9 @@ export function CommandPalette() {
             <Command.Empty>Nothing matches that.</Command.Empty>
 
             <Command.Group heading="Go">
-              {PAGES.map((page, index) => {
+              {PAGES.map((page) => {
                 const Icon = ICONS[page];
+                const key = PAGE_SHORTCUT[page];
                 return (
                   <Command.Item
                     key={page}
@@ -91,7 +94,7 @@ export function CommandPalette() {
                   >
                     <Icon size={15} strokeWidth={1.6} className="cmd-icon text-muted" />
                     <span>Go to {PAGE_LABEL[page]}</span>
-                    <span className="num ml-auto text-[11px] text-muted">Ctrl {index + 1}</span>
+                    {key ? <span className="num ml-auto text-[11px] text-muted">Ctrl {key}</span> : null}
                   </Command.Item>
                 );
               })}

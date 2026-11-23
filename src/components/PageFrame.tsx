@@ -14,6 +14,7 @@ export function PageFrame({
   subtitle,
   aside,
   wide = false,
+  footer,
   children,
 }: {
   title: string;
@@ -21,6 +22,12 @@ export function PageFrame({
   aside?: ReactNode;
   /** A page of tiles takes the whole window; a page of forms stays a readable column. */
   wide?: boolean;
+  /**
+   * The page's action bar. It lives here rather than in the scroller so the primary
+   * control is on screen at every window height, and so a `sticky` element never has to
+   * exist inside a page that only scrolls when it is long.
+   */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -77,6 +84,8 @@ export function PageFrame({
       >
         <div className={wide ? "w-full" : "mx-auto w-full max-w-[820px]"}>{children}</div>
       </div>
+
+      {footer ? <div className="relative shrink-0">{footer}</div> : null}
     </div>
   );
 }

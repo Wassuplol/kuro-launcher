@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   UserRound,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { motion } from "motion/react";
 import type { ComponentType } from "react";
@@ -36,12 +37,16 @@ import { LaunchScreen } from "../screens/Launch";
 import { LibraryScreen } from "../screens/Library";
 import { SearchScreen } from "../screens/Search";
 import { SessionsScreen } from "../screens/Sessions";
+import { StageScreen } from "../screens/Stage";
 import { VersionsScreen } from "../screens/Versions";
 
 const win = getCurrentWindow();
 
-const RAIL: { page: Page; icon: typeof Home; shortcut: string }[] = [
+const RAIL: { page: Page; icon: typeof Home; shortcut?: string }[] = [
   { page: "home", icon: Home, shortcut: "Ctrl 1" },
+  // The stage sits second because it is where a person with more than one account
+  // starts, and it is the only page whose content is theirs rather than Roblox's.
+  { page: "stage", icon: UsersRound },
   { page: "search", icon: Search, shortcut: "Ctrl 2" },
   { page: "library", icon: Library, shortcut: "Ctrl 3" },
   { page: "sessions", icon: History, shortcut: "Ctrl 0" },
@@ -62,6 +67,7 @@ const TOOLS: { page: Page; label: string; icon: typeof Home; shortcut: string }[
 
 const SCREENS: Record<Page, ComponentType> = {
   home: HomeScreen,
+  stage: StageScreen,
   search: SearchScreen,
   library: LibraryScreen,
   sessions: SessionsScreen,

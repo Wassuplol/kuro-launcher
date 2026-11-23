@@ -474,6 +474,55 @@ export type Roster = {
   note?: string;
 };
 
+/**
+ * One account on a pad. The figure is the avatar Roblox renders now, transparent,
+ * so it stands on a lit pool instead of sitting in a frame.
+ */
+export type StagePad = {
+  user: number;
+  name: string;
+  display: string;
+  body: string | null;
+  headshot: string | null;
+  presence: Presence;
+  /** `ok`, `expired` or `unknown`, from the last health check. */
+  health: string;
+  /** The account a launch would use when nothing else is named. */
+  default: boolean;
+};
+
+export type StageView = {
+  pads: StagePad[];
+  fetched: number;
+  /** True when presence answered at all. False means nobody knows, not "offline". */
+  presence: boolean;
+  note?: string;
+};
+
+/** A destination the stage can offer without asking Roblox anything. */
+export type StagePlace = {
+  place: number;
+  universe: number;
+  name: string;
+  at: number;
+};
+
+/** What happened to one pad when the bar was pressed. */
+export type SquadPad = {
+  account: number;
+  name: string;
+  display: string;
+  ok: boolean;
+  detail: string;
+};
+
+export type Squad = {
+  attempted: number;
+  started: number;
+  pads: SquadPad[];
+  shared: boolean;
+};
+
 /** One page of Roblox favourites, as the Library draws it. */
 export type Shelf = {
   games: GameCard[];

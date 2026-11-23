@@ -26,12 +26,31 @@ const PORT = process.env.KURO_CDP_PORT ?? "9333";
 const BASE = `http://127.0.0.1:${PORT}`;
 
 const router = readFileSync(new URL("../src/app/router.ts", import.meta.url), "utf8");
-const PAGES = [...router.matchAll(/^\s+"([a-z]+)",$/gm)].map((match) => match[1]);
+
+/**
+ * One block of router.ts, by name.
+ *
+ * The file holds several maps that share the shape `name: "value",` — the page list,
+ * the labels and the hotkey table. Scanning the whole file merged them, so every page
+ * was looked up under its shortcut and the walk failed on the first one. Read the block
+ * that is asked for and nothing else.
+ */
+function mapBlock(name) {
+  const start = router.indexOf(`export const ${name}`);
+  if (start < 0) throw new Error(`router.ts has no ${name}`);
+  const end = router.indexOf("\n};", start);
+  return router.slice(start, end < 0 ? undefined : end);
+}
+
+const PAGES = [...mapBlock("PAGES = [").matchAll(/^\s+"([a-z]+)",$/gm)].map((match) => match[1]);
 
 // The rail says "Launch a place" and "Roblox versions", so the label has to come
 // from the same table the rail reads rather than from the route id.
 const LABELS = Object.fromEntries(
-  [...router.matchAll(/^\s+([a-z]+):\s+"([^"]+)",$/gm)].map((match) => [match[1], match[2]]),
+  [...mapBlock("PAGE_LABEL").matchAll(/^\s+([a-z]+):\s+"([^"]+)",$/gm)].map((match) => [
+    match[1],
+    match[2],
+  ]),
 );
 
 /**
@@ -145,8 +164,13 @@ const probe = `(() => {
   const columnBox = column.getBoundingClientRect();
 
   return {
+    hash: location.hash,
     heading: document.querySelector("main h1")?.textContent?.trim() ?? "",
-    framed: String(column.className).includes("max-w-"),
+    // A wide page fills the window ("w-full") instead of centring a column ("max-w-…").
+    // Both are PageFrame pages. The token is matched exactly so "min-w-full" cannot pass.
+    framed:
+      String(column.className).includes("max-w-") ||
+      String(column.className).split(" ").includes("w-full"),
     blocks,
     pinned,
     tiny,
@@ -241,10 +265,30 @@ for (const page of PAGES) {
   }
   await settle();
 
-  const { heading, blocks, framed, pinned, tiny, column } = await evaluate(probe);
+  // A page that is still swapping its skeleton for content can be caught between two
+  // React commits, with an empty scroller for a few frames. That read is not a finding,
+  // so it is asked again before anything is concluded from it.
+  let measured = await evaluate(probe);
+  if (!measured?.framed || !measured?.heading || !measured?.blocks?.length) {
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await settle();
+    measured = await evaluate(probe);
+  }
+
+  const { heading, blocks, framed, pinned, tiny, column } = measured;
 
   if (!framed || !heading || !blocks?.length) {
-    console.log(`${page.padEnd(12)} still its own layout, not a PageFrame page: nothing to check`);
+    console.log(
+      `${page.padEnd(12)} still its own layout, not a PageFrame page: nothing to check`,
+      JSON.stringify({
+        hash: measured?.hash,
+        error: measured?.error,
+        framed,
+        heading,
+        blocks: blocks?.length,
+      }),
+    );
     continue;
   }
 

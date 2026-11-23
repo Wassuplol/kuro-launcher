@@ -1878,6 +1878,201 @@ async fn friends_roster(state: State<'_, AppState>) -> Result<social::Roster, La
         .map_err(|e| worker_failed(format!("The friend list was not read: {e}")))?
 }
 
+// ---- the stage ----
+
+/// Every account on this machine, on its pad, with the figure Roblox renders now.
+///
+/// The pads come from the local account store, so this page draws with no network at
+/// all; the figures and the presence are the only two things that ask Roblox, and both
+/// degrade to "a pad with a name on it" rather than to an empty page.
+#[tauri::command]
+async fn stage_view(state: State<'_, AppState>) -> Result<social::StageView, LaunchError> {
+    let root = state.data_root.clone();
+    let store = identity::load(&root)?;
+    let chosen = store
+        .default
+        .or_else(|| store.accounts.first().map(|account| account.user_id));
+
+    // One session covers the whole presence batch. A dead cookie is not a reason to
+    // draw an empty stage, so the failure is left to the note the view carries.
+    let cookie = chosen.and_then(|account| identity::cookie_for(&root, account).ok());
+
+    let seats: Vec<social::Seat> = store
+        .accounts
+        .iter()
+        .map(|account| social::Seat {
+            user: account.user_id,
+            name: account.name.clone(),
+            display: account.display.clone(),
+            health: account.health.clone(),
+            default: Some(account.user_id) == chosen,
+        })
+        .collect();
+
+    let budget = state.budget.clone();
+    let cache = state.cache.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        social::stage(&budget, &cache, cookie.as_deref(), &seats)
+    })
+    .await
+    .map_err(|e| worker_failed(format!("The stage was not read: {e}")))
+}
+
+/// A destination the stage can offer without asking Roblox anything.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagePlace {
+    pub place: u64,
+    pub universe: u64,
+    pub name: String,
+    /// Unix seconds of the last launch that named it.
+    pub at: u64,
+}
+
+/// The places this machine has already named, newest first.
+#[tauri::command]
+fn stage_places(state: State<'_, AppState>) -> Vec<StagePlace> {
+    receipts::known_places(&state.data_root)
+        .into_iter()
+        .map(|(place, universe, name, at)| StagePlace {
+            place,
+            universe,
+            name,
+            at,
+        })
+        .collect()
+}
+
+/// What happened to one pad in a squad launch.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SquadPad {
+    pub account: u64,
+    pub name: String,
+    pub display: String,
+    pub ok: bool,
+    /// The mode that ran, or the sentence that stopped it. Never empty.
+    pub detail: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Squad {
+    pub attempted: usize,
+    pub started: usize,
+    pub pads: Vec<SquadPad>,
+    /// True when the same destination was handed to more than one pad.
+    pub shared: bool,
+}
+
+/// Hands one destination to every pad on the stage.
+///
+/// Sequential on purpose: each launch mints its own ticket, resolves its own build and
+/// spawns its own process, and two bootstrappers racing on one install write the same
+/// files. The gap between them is the bootstrapper's, not a guess at a loading time.
+///
+/// A failure is per pad rather than per press, because the common case is the third pad
+/// being refused while the first two are already in a game. The page keeps the ones that
+/// ran and says what stopped the rest.
+#[tauri::command]
+async fn stage_launch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    target: String,
+    accounts: Vec<u64>,
+) -> Result<Squad, LaunchError> {
+    if accounts.is_empty() {
+        return Err(LaunchError::new(
+            FailureCode::NotFound,
+            "No pad is on the stage, so there is nothing to start.",
+        )
+        .with_action("Leave an account on a pad"));
+    }
+
+    // Said before the first ticket, because the failure it prevents is the confusing
+    // one: pad one starts, pad two focuses pad one's window and reports nothing.
+    let multi = state
+        .settings
+        .lock()
+        .map_err(|_| poisoned())?
+        .launch
+        .multi_instance;
+    if accounts.len() > 1 && !multi {
+        return Err(LaunchError::new(
+            FailureCode::MutexHeld,
+            "More than one pad means more than one Roblox at a time, and that switch is off.",
+        )
+        .with_action("Allow more than one game"));
+    }
+
+    let root = state.data_root.clone();
+    let store = identity::load(&root)?;
+
+    let mut pads = Vec::with_capacity(accounts.len());
+    let mut started = 0usize;
+
+    for (index, account) in accounts.iter().enumerate() {
+        let named = store.accounts.iter().find(|row| row.user_id == *account);
+        let name = named.map(|row| row.name.clone()).unwrap_or_default();
+        let display = named.map(|row| row.display.clone()).unwrap_or_default();
+
+        if index > 0 {
+            // The client's bootstrapper takes the install's files before it starts the
+            // game, and two of them at once is a corrupt update rather than a squad.
+            tauri::async_runtime::spawn_blocking(|| {
+                std::thread::sleep(std::time::Duration::from_millis(1_200))
+            })
+            .await
+            .ok();
+        }
+
+        let answer = run_launch(
+            &app,
+            state.inner(),
+            RunRequest {
+                target: target.clone(),
+                user_id: Some(*account),
+                flags: None,
+                client: None,
+                after: profiles::After::Stay,
+            },
+        )
+        .await;
+
+        match answer {
+            Ok(launched) => {
+                started += 1;
+                pads.push(SquadPad {
+                    account: *account,
+                    name,
+                    display,
+                    ok: true,
+                    detail: if launched.reused {
+                        "Already running".to_string()
+                    } else {
+                        launched.mode_label.clone()
+                    },
+                });
+            }
+            Err(failure) => pads.push(SquadPad {
+                account: *account,
+                name,
+                display,
+                ok: false,
+                detail: failure.message,
+            }),
+        }
+    }
+
+    Ok(Squad {
+        attempted: accounts.len(),
+        started,
+        shared: accounts.len() > 1,
+        pads,
+    })
+}
+
 // ---- the assistant ----
 
 /// What the page is allowed to know: the endpoint, the model, and whether a key is
@@ -2478,6 +2673,9 @@ pub fn run() {
             receipts_names,
             receipts_open,
             friends_roster,
+            stage_view,
+            stage_places,
+            stage_launch,
             assistant_config,
             assistant_models,
             assistant_save,

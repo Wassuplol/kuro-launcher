@@ -533,3 +533,246 @@ pub fn roster(
         note,
     })
 }
+
+// ---------------------------------------------------------------------------
+// The stage
+// ---------------------------------------------------------------------------
+
+/// The full figure rather than the face, for a pad.
+///
+/// Measured 2026-11-23: `users/avatar` takes 100 ids a call at the same 500 a minute as
+/// the headshot, and answers a **720 square PNG with a real alpha channel**: the figure
+/// fills 66% of the width and 85% of the height and every corner is transparent. That
+/// transparency is what lets a pad carry a person on a lit pool instead of a photograph
+/// in a box.
+const BODIES: &str = "https://thumbnails.roblox.com/v1/users/avatar?userIds=";
+
+/// An outfit change moves the avatar, and the stage's one claim is that this is the
+/// figure Roblox renders now, so a signed URL is trusted for an hour rather than for the
+/// thirty days it stays valid.
+const BODY_TTL: Duration = Duration::from_secs(3_600);
+
+/// One account this machine can start, as the stage needs it.
+#[derive(Debug, Clone, Default)]
+pub struct Seat {
+    pub user: u64,
+    pub name: String,
+    pub display: String,
+    /// `ok`, `expired` or `unknown`, from the last health check.
+    pub health: String,
+    pub default: bool,
+}
+
+/// A figure standing on a pad.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pad {
+    pub user: u64,
+    pub name: String,
+    pub display: String,
+    /// The full figure, transparent. Absent when the thumbnail did not answer, which is
+    /// drawn as a pad with no one on it rather than as a broken row.
+    pub body: Option<String>,
+    pub headshot: Option<String>,
+    pub presence: Presence,
+    pub health: String,
+    pub default: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageView {
+    pub pads: Vec<Pad>,
+    pub fetched: u64,
+    /// True when the presence batch answered at all. `false` is not "everybody is
+    /// offline": it means nobody knows, and the page says so instead of printing a
+    /// status it does not have.
+    pub presence: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+fn bodies(budget: &Budget, cache: &Cache, ids: &[u64]) -> BTreeMap<u64, String> {
+    let mut out = BTreeMap::new();
+    let mut missing = Vec::new();
+
+    for id in ids {
+        match cache.get(&format!("ubody:{id}")) {
+            Some(url) => {
+                out.insert(*id, url);
+            }
+            None => missing.push(*id),
+        }
+    }
+    if missing.is_empty() {
+        return out;
+    }
+
+    for chunk in missing.chunks(PER_CALL) {
+        if budget.spend(Class::Thumbs).is_err() {
+            // A missing figure is a lit pad with a name on it, not a missing pad.
+            return out;
+        }
+        let url = format!(
+            "{BODIES}{}&size=720x720&format=Png&isCircular=false",
+            chunk
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let Ok(answer) = http::get(&url) else {
+            return out;
+        };
+        if !answer.ok() {
+            return out;
+        }
+        let Ok(parsed) = serde_json::from_str::<RawThumbs>(&answer.body) else {
+            return out;
+        };
+        for thumb in parsed.data {
+            if thumb.image_url.is_empty() {
+                continue;
+            }
+            cache.put(
+                &format!("ubody:{}", thumb.target_id),
+                &thumb.image_url,
+                BODY_TTL,
+            );
+            out.insert(thumb.target_id, thumb.image_url);
+        }
+    }
+
+    out
+}
+
+/// The pads: every account on this machine, its figure, and what it is doing.
+///
+/// Presence is one call for the whole batch and needs a session, so the session is
+/// optional here. Without it the pads still draw, from the cached figures and the health
+/// the last check wrote, and the note says why no pad knows whether it is free. A stage
+/// that refused to draw because something else failed would be the wrong trade for the
+/// page whose whole job is showing who is standing there.
+pub fn stage(budget: &Budget, cache: &Cache, cookie: Option<&str>, seats: &[Seat]) -> StageView {
+    if seats.is_empty() {
+        return StageView {
+            pads: Vec::new(),
+            fetched: now(),
+            presence: false,
+            note: Some("There is no account on this machine to stand on a pad.".to_string()),
+        };
+    }
+
+    let ids: Vec<u64> = seats.iter().map(|seat| seat.user).collect();
+    let figures = bodies(budget, cache, &ids);
+    let faces = headshots(budget, cache, &ids);
+
+    let (statuses, mut note, answered) = match cookie {
+        Some(cookie) => match presence(budget, cookie, &ids) {
+            Ok(statuses) => (statuses, None, true),
+            // The pads draw anyway; the sentence says which half is missing.
+            Err(failure) => (BTreeMap::new(), Some(failure.message), false),
+        },
+        None => (
+            BTreeMap::new(),
+            Some("No account answered a session, so the pads cannot say who is free.".to_string()),
+            false,
+        ),
+    };
+
+    let pads: Vec<Pad> = seats
+        .iter()
+        .map(|seat| Pad {
+            user: seat.user,
+            name: seat.name.clone(),
+            display: seat.display.clone(),
+            body: figures.get(&seat.user).cloned(),
+            headshot: faces.get(&seat.user).cloned(),
+            presence: status(statuses.get(&seat.user)),
+            health: seat.health.clone(),
+            default: seat.default,
+        })
+        .collect();
+
+    // A batch that answers for fewer ids than were sent is a fault worth naming. The
+    // alternative is a page where a live account reads as offline, which looks like a
+    // fact about the account rather than a failure of the parser.
+    if note.is_none() && statuses.len() < ids.len() {
+        note = Some(format!(
+            "Presence answered for {} of {} pads, so some of them cannot say whether they are free.",
+            statuses.len(),
+            ids.len()
+        ));
+    }
+
+    StageView {
+        pads,
+        fetched: now(),
+        presence: answered,
+        note,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn seat(user: u64) -> Seat {
+        Seat {
+            user,
+            name: format!("dummy{user}"),
+            display: format!("Pad {user}"),
+            health: "ok".to_string(),
+            default: user == 1,
+        }
+    }
+
+    /// The stage must draw with no network at all: the local account store is the only
+    /// thing it is allowed to need. Every figure here is pre-seeded into the cache, which
+    /// is exactly the state a second visit to the page is in.
+    #[test]
+    fn a_pad_draws_without_a_session() {
+        let cache = Cache::default();
+        cache.put("ubody:1", "https://cdn/one.png", Duration::from_secs(60));
+        cache.put(
+            "uhead:1",
+            "https://cdn/one-face.png",
+            Duration::from_secs(60),
+        );
+
+        let view = stage(&Budget::default(), &cache, None, &[seat(1)]);
+
+        assert_eq!(view.pads.len(), 1);
+        let pad = &view.pads[0];
+        assert_eq!(pad.display, "Pad 1");
+        assert_eq!(pad.body.as_deref(), Some("https://cdn/one.png"));
+        assert_eq!(pad.headshot.as_deref(), Some("https://cdn/one-face.png"));
+        // No session means no presence, and the page is told why rather than shown a
+        // pad that reads as offline.
+        assert_eq!(pad.presence.kind, 0);
+        assert!(view.note.is_some());
+    }
+
+    /// A machine with no account gets a sentence, not a failed command: the page that
+    /// shows this also offers the button that fixes it.
+    #[test]
+    fn an_empty_stage_says_so() {
+        let view = stage(&Budget::default(), &Cache::default(), None, &[]);
+        assert!(view.pads.is_empty());
+        assert!(!view.presence);
+        assert!(view.note.unwrap().contains("no account"));
+    }
+
+    /// Health travels through untouched, because the page decides whether a pad starts
+    /// on the light or off it from this value alone.
+    #[test]
+    fn health_reaches_the_page() {
+        let cache = Cache::default();
+        cache.put("ubody:7", "https://cdn/seven.png", Duration::from_secs(60));
+        let mut expired = seat(7);
+        expired.health = "expired".to_string();
+
+        let view = stage(&Budget::default(), &cache, None, &[expired]);
+        assert_eq!(view.pads[0].health, "expired");
+    }
+}

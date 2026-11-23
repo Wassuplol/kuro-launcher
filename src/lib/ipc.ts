@@ -1,5 +1,54 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AccountView, AppInfo, AssistantConnection, AssistantFinished, AssistantTurn, Balance, ClientKind, DiscoveryFeed, DiscoverySearch, FlagCatalog, FlagDiff, FlagHit, FlagLease, FlagRow, FlagSnapshot, FlagStore, FlagsView, GameDetail, GameServers, GpuPin, HandoverState, ImportedFlags, InstallMethod, LaunchReading, LaunchState, LaunchTile, Launched, Ledger, LinkState, MultiInstance, Party, PlayLog, Played, PresenceView, PrunePlan, PruneResult, QuickLoginAttempt, QuickLoginPoll, Receipt, Roster, Settings, Shelf, StripState, SupplySnapshot, VerifyReport } from "./types";
+import type {
+  AccountView,
+  AppInfo,
+  AssistantConnection,
+  AssistantFinished,
+  AssistantTurn,
+  Balance,
+  ClientKind,
+  DiscoveryFeed,
+  DiscoverySearch,
+  FlagCatalog,
+  FlagDiff,
+  FlagHit,
+  FlagLease,
+  FlagRow,
+  FlagSnapshot,
+  FlagStore,
+  FlagsView,
+  GameDetail,
+  GameServers,
+  GpuPin,
+  HandoverState,
+  ImportedFlags,
+  InstallMethod,
+  LaunchReading,
+  LaunchState,
+  LaunchTile,
+  Launched,
+  Ledger,
+  LinkState,
+  MultiInstance,
+  Party,
+  PlayLog,
+  Played,
+  PresenceView,
+  PrunePlan,
+  PruneResult,
+  QuickLoginAttempt,
+  QuickLoginPoll,
+  Receipt,
+  Roster,
+  Settings,
+  Shelf,
+  Squad,
+  StagePlace,
+  StageView,
+  StripState,
+  SupplySnapshot,
+  VerifyReport,
+} from "./types";
 
 export type FailureCode =
   | "client_missing"
@@ -175,6 +224,14 @@ export const api = {
 
   /** The friend list with names, faces and live presence. Needs an account. */
   friendsRoster: () => call<Roster>("friends_roster"),
+
+  /** The pads: every account on this machine, its figure, and what it is doing. */
+  stageView: () => call<StageView>("stage_view"),
+  /** Places this machine has already named. Read from disk, no network. */
+  stagePlaces: () => call<StagePlace[]>("stage_places"),
+  /** Hands one destination to every pad named, and reports each one. */
+  stageLaunch: (target: string, accounts: number[]) =>
+    call<Squad>("stage_launch", { target, accounts }),
 
   /** The endpoint, the model, and whether a key is set. Never the key. */
   assistantConfig: () => call<AssistantConnection>("assistant_config"),

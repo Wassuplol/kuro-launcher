@@ -20,3 +20,20 @@ html,
 body {
   background: transparent;
 }
+
+/*
+ * A live avatar breathes on a seven second cycle, and nothing else loops.
+ *
+ * The keyframes carry the pointer offset as well as the breath, because an animation on
+ * `transform` replaces the inline one: a figure that is breathing would otherwise stop
+ * answering the hand that is moving it.
+ */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: translate3d(calc(var(--px, 0) * 1px), calc(var(--py, 0) * 1px), 0);
+  }
+  50% {
+    transform: translate3d(calc(var(--px, 0) * 1px), calc((var(--py, 0) - 3) * 1px), 0);
+  }
+}

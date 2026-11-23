@@ -726,6 +726,26 @@ pub fn cached_names(root: &Path) -> HashMap<u64, String> {
         .collect()
 }
 
+/// Every place this machine has already resolved, newest first.
+///
+/// Read from disk only. The stage offers the last destinations it can name without a
+/// network call, because the one thing a launcher's home should never do is wait on
+/// Roblox to say what you played an hour ago.
+pub fn known_places(root: &Path) -> Vec<(u64, u64, String, u64)> {
+    let mut rows: Vec<(u64, u64, String, u64)> = read_places(root)
+        .places
+        .into_iter()
+        .filter_map(|(place, resolved)| {
+            place
+                .parse()
+                .ok()
+                .map(|place| (place, resolved.universe, resolved.name, resolved.at))
+        })
+        .collect();
+    rows.sort_by_key(|row| std::cmp::Reverse(row.3));
+    rows
+}
+
 /// Resolves places the cache does not know yet, then answers for everything asked.
 ///
 /// Best effort by design: this page exists to work when Roblox does not answer, so a
@@ -831,6 +851,43 @@ fn get_json<T: serde::de::DeserializeOwned>(url: &str) -> Option<T> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("kuro-places-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// The stage offers the last destinations this machine already named, newest first,
+    /// with no network call. A key that is not a number is dropped rather than shown.
+    #[test]
+    fn known_places_come_back_newest_first() {
+        let dir = scratch("order");
+        let json = r#"{"schema":1,"places":{
+            "189707":{"universe":65241,"name":"Natural Disaster Survival","at":100},
+            "10449761463":{"universe":3808081382,"name":"The Strongest Battlegrounds","at":300},
+            "not-a-place":{"universe":1,"name":"Broken","at":900}
+        }}"#;
+        fs::write(dir.join("places.json"), json).unwrap();
+
+        let rows = known_places(&dir);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].0, 10_449_761_463);
+        assert_eq!(rows[0].2, "The Strongest Battlegrounds");
+        assert_eq!(rows[1].0, 189_707);
+        assert_eq!(rows[1].1, 65_241);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A missing file is an empty list, not an error: a fresh install has to draw.
+    #[test]
+    fn no_places_file_is_no_destinations() {
+        let dir = scratch("absent");
+        assert!(known_places(&dir).is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     const CLEAN: &str = "\
 2026-11-18T16:13:44.389Z,0.389293,b668,6,Info [DFLog::Mimalloc] mi_option_reserve_os_memory=0
