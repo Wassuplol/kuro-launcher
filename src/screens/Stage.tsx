@@ -6,8 +6,9 @@ import { EmptyState } from "../components/EmptyState";
 import { PageFrame } from "../components/PageFrame";
 import { cn } from "../lib/cn";
 import { api, CommandError, detailOf } from "../lib/ipc";
-import type { StagePad, StagePlace, StageView, Squad } from "../lib/types";
+import type { GameServer, StagePad, StagePlace, StageView, Squad } from "../lib/types";
 import { useReducedMotion } from "../lib/useReducedMotion";
+import { useDiscovery } from "../store/discovery";
 import { useShell } from "../store/shell";
 import { useSocial } from "../store/social";
 
@@ -50,6 +51,13 @@ export function StageScreen() {
   const roster = useSocial((state) => state.roster);
   const loadRoster = useSocial((state) => state.load);
 
+  // The game page reads its server list through this store, and it allows three calls a
+  // minute. Same store means the stage spends that budget once, not twice.
+  const servers = useDiscovery((state) => state.servers);
+  const serversLoading = useDiscovery((state) => state.serversLoading);
+  const serversProblem = useDiscovery((state) => state.serversProblem);
+  const loadServers = useDiscovery((state) => state.loadServers);
+
   const [view, setView] = useState<StageView | null>(null);
   const [places, setPlaces] = useState<StagePlace[]>([]);
   const [destination, setDestination] = useState<StagePlace | null>(null);
@@ -63,6 +71,14 @@ export function StageScreen() {
   const [running, setRunning] = useState(false);
   const [report, setReport] = useState<Squad | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
+
+  /**
+   * The server every pad is sent to, or none. It is kept whole rather than by id so the
+   * ping and the player count travel with the choice and the panel can repeat them
+   * without asking Roblox again.
+   */
+  const [server, setServer] = useState<GameServer | null>(null);
+  const [picking, setPicking] = useState(false);
 
   const multi = settings?.launch.multiInstance ?? false;
   const reduced = useReducedMotion();
@@ -96,6 +112,15 @@ export function StageScreen() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!picking) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPicking(false);
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [picking]);
 
   useEffect(() => {
     void read();
@@ -138,7 +163,11 @@ export function StageScreen() {
     pads.current.style.setProperty("--py", "0");
   };
 
-  const target = destination ? `roblox://placeId=${destination.place}` : null;
+  const target = destination
+    ? server
+      ? `roblox://placeId=${destination.place}&gameInstanceId=${server.id}`
+      : `roblox://placeId=${destination.place}`
+    : null;
   const needsMulti = onStage.length > 1 && !multi;
 
   async function launch() {
@@ -186,11 +215,18 @@ export function StageScreen() {
   // The one floating surface on this page: the bar that hands every pad the same
   // destination. It sits in the frame's footer, so it cannot fall below the fold.
   const bar = (
-    <div className="mx-auto w-full max-w-[1184px] px-8 pt-2 pb-4">
+    <div className="relative mx-auto w-full max-w-[1184px] px-8 pt-2 pb-4">
         <div className="flex items-center justify-between gap-3 rounded-card border border-white/10 px-3.5 py-2.5">
           <div className="min-w-0">
-            <div className="truncate text-[12.5px] font-semibold text-body">
-              {destination ? destination.name : "No destination yet"}
+            <div className="flex items-baseline gap-2">
+              <span className="truncate text-[12.5px] font-semibold text-body">
+                {destination ? destination.name : "No destination yet"}
+              </span>
+              {server ? (
+                <span className="num shrink-0 text-[10.5px] text-[var(--dim)]">
+                  {server.ping > 0 ? `pinned · ${server.ping} ms` : "pinned"}
+                </span>
+              ) : null}
             </div>
             <div
               className={cn(
@@ -220,10 +256,16 @@ export function StageScreen() {
             {destination ? (
               <button
                 type="button"
-                onClick={() => openGame(destination.universe, destination.place)}
+                aria-expanded={picking}
+                onClick={() => {
+                  setPicking((open) => !open);
+                  // Opening is the only thing that spends a call, and the discovery store
+                  // hands back its cache when this place was read already.
+                  void loadServers(destination.place);
+                }}
                 className="ui flex h-9 items-center rounded-control border border-white/10 px-3 text-[12px] text-muted hover:bg-white/5 hover:text-body"
               >
-                Game page
+                {picking ? "Close" : "Pick a server"}
               </button>
             ) : null}
 
@@ -269,6 +311,101 @@ export function StageScreen() {
             )}
           </div>
         </div>
+
+        {picking && destination ? (
+          <>
+            <div className="fixed inset-0 z-10" aria-hidden onClick={() => setPicking(false)} />
+            <div
+              role="dialog"
+              aria-label="Choose a server"
+              className="absolute right-8 bottom-full z-20 mb-2 w-[420px] overflow-hidden rounded-card border border-white/10 bg-panel shadow-2xl"
+            >
+              <div className="flex items-baseline justify-between border-b border-white/8 px-3 py-2">
+                <span className="text-[10px] font-semibold tracking-[0.16em] text-[var(--dim)]">
+                  SERVERS
+                </span>
+                <span className="text-[10.5px] text-[var(--dim)]">players · server · ping, lowest first</span>
+              </div>
+
+              <div className="max-h-[286px] overflow-y-auto p-1.5">
+                <button
+                  type="button"
+                  aria-pressed={!server}
+                  onClick={() => {
+                    setServer(null);
+                    setPicking(false);
+                    setReport(null);
+                  }}
+                  className={cn(
+                    "ui flex h-9 w-full items-center justify-between rounded-control px-2 text-left text-[12px]",
+                    !server ? "bg-raised text-body" : "text-muted hover:bg-white/5 hover:text-body",
+                  )}
+                >
+                  <span>Any server</span>
+                  <span className="num text-[11px] text-[var(--dim)]">no pin</span>
+                </button>
+
+                {servers?.place === destination.place
+                  ? [...servers.list]
+                      .sort((left, right) => {
+                        // An unpublished ping is not the fastest server.
+                        const a = left.ping > 0 ? left.ping : Number.MAX_SAFE_INTEGER;
+                        const b = right.ping > 0 ? right.ping : Number.MAX_SAFE_INTEGER;
+                        return a - b;
+                      })
+                      .slice(0, 12)
+                      .map((row) => (
+                        <button
+                          key={row.id}
+                          type="button"
+                          aria-pressed={server?.id === row.id}
+                          onClick={() => {
+                            setServer(row);
+                            setPicking(false);
+                            setReport(null);
+                          }}
+                          className={cn(
+                            "ui flex h-9 w-full items-center justify-between gap-3 rounded-control px-2 text-left text-[12px]",
+                            server?.id === row.id
+                              ? "bg-raised text-body"
+                              : "text-muted hover:bg-white/5 hover:text-body",
+                          )}
+                        >
+                          <span className="num shrink-0 text-[11.5px]">
+                            {row.playing}/{row.maxPlayers}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-[10.5px] text-[var(--dim)]">
+                            {row.id.slice(0, 8)}
+                          </span>
+                          <span className="num shrink-0 text-[11px] text-body">
+                            {row.ping > 0 ? `${row.ping} ms` : "no ping"}
+                            {row.fps > 0 ? ` · ${Math.round(row.fps)} fps` : ""}
+                          </span>
+                        </button>
+                      ))
+                  : null}
+
+                {serversLoading ? (
+                  <p className="px-2 py-3 text-[11.5px] text-[var(--dim)]">Reading the public servers.</p>
+                ) : null}
+
+                {serversProblem ? (
+                  <p className="px-2 py-3 text-[11.5px] text-danger">{serversProblem.message}</p>
+                ) : null}
+
+                {!serversLoading &&
+                !serversProblem &&
+                servers?.place === destination.place &&
+                servers.list.length === 0 ? (
+                  <p className="px-2 py-3 text-[11.5px] leading-[1.55] text-[var(--dim)]">
+                    Roblox lists no public servers for this place. A game can hide them, and a
+                    private server never appears here.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </>
+        ) : null}
       </div>
   );
 
@@ -471,7 +608,11 @@ export function StageScreen() {
                         aria-pressed={chosen}
                         onClick={() => {
                           setDestination(place);
+                          // A server id belongs to one place. Keeping it across a change
+                          // would hand every pad an instance that no longer exists.
+                          setServer(null);
                           setReport(null);
+                          setPicking(false);
                         }}
                         title={place.name}
                         className={cn(
@@ -491,9 +632,13 @@ export function StageScreen() {
                 </p>
               )}
 
-              <div className="mt-auto flex items-center justify-between border-t border-white/8 px-2 pt-2 pb-1 text-[11.5px]">
-                <span className="text-muted">Place</span>
-                <span className="num text-body">{destination ? destination.place : "none"}</span>
+              <div className="mt-auto flex items-center justify-between gap-2 border-t border-white/8 px-2 pt-2 pb-1 text-[11.5px]">
+                <span className="shrink-0 text-muted">Server</span>
+                <span className="num min-w-0 truncate text-body">
+                  {server
+                    ? `${server.id.slice(0, 8)} · ${server.ping > 0 ? `${server.ping} ms` : "no ping"}`
+                    : "Any"}
+                </span>
               </div>
               <div className="flex items-center justify-between px-2 pb-1 text-[11.5px]">
                 <span className="text-muted">Accounts</span>
@@ -515,6 +660,15 @@ export function StageScreen() {
                   {multi ? "allowed" : "off"}
                 </button>
               </div>
+              {destination ? (
+                <button
+                  type="button"
+                  onClick={() => openGame(destination.universe, destination.place)}
+                  className="ui mt-1 flex h-6 items-center px-2 text-[11px] text-[var(--dim)] hover:text-body"
+                >
+                  Open the game page
+                </button>
+              ) : null}
             </div>
           </div>
 
