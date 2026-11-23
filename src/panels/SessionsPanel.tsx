@@ -25,6 +25,7 @@ const OUTCOME: Record<Receipt["outcome"], { label: string; tone: "gold" | "succe
   ended: { label: "Ended", tone: "muted" },
   no_handshake: { label: "No server", tone: "gold" },
   never_joined: { label: "No join", tone: "muted" },
+  tray: { label: "Tray client", tone: "muted" },
   crashed: { label: "Crash", tone: "danger" },
 };
 
@@ -35,6 +36,7 @@ type Totals = {
   seconds: number;
   reached: number;
   missed: number;
+  tray: number;
 };
 
 /**
@@ -53,6 +55,13 @@ function playedSeconds(receipt: Receipt): number {
 function summarize(receipts: Receipt[]): Totals {
   return receipts.reduce<Totals>(
     (sum, receipt) => {
+      // A tray client is Roblox's own updater waiting in the notification area, not a
+      // launch from this app. Counting it as one turned an afternoon of tray clients into
+      // six failures on a page where nothing had failed.
+      if (receipt.outcome === "tray") {
+        sum.tray += 1;
+        return sum;
+      }
       sum.count += 1;
       if (receipt.handshake) {
         sum.reached += 1;
@@ -62,7 +71,7 @@ function summarize(receipts: Receipt[]): Totals {
       }
       return sum;
     },
-    { count: 0, seconds: 0, reached: 0, missed: 0 },
+    { count: 0, seconds: 0, reached: 0, missed: 0, tray: 0 },
   );
 }
 
@@ -72,6 +81,10 @@ export function SessionsBody() {
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  // Roblox's updater opens tray clients on its own schedule, several a day, and each one
+  // writes a player log. They are real logs and are kept, but they are not launches, so
+  // they stay out of the list until somebody asks for them.
+  const [showTray, setShowTray] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -112,11 +125,12 @@ export function SessionsBody() {
   const totals = useMemo(() => summarize(receipts ?? []), [receipts]);
 
   const shown = useMemo(() => {
-    const list = receipts ?? [];
+    const list = (receipts ?? []).filter((receipt) => showTray || receipt.outcome !== "tray");
     if (filter === "reached") return list.filter((receipt) => receipt.handshake);
-    if (filter === "missed") return list.filter((receipt) => !receipt.handshake);
+    if (filter === "missed")
+      return list.filter((receipt) => !receipt.handshake && receipt.outcome !== "tray");
     return list;
-  }, [receipts, filter]);
+  }, [receipts, filter, showTray]);
 
   if (problem) {
     return (
@@ -192,11 +206,28 @@ export function SessionsBody() {
         ) : (
           shown.map((receipt) => <ReceiptRow key={receipt.id} receipt={receipt} />)
         )}
+
+        {totals.tray > 0 ? (
+          <div className="flex items-center justify-between gap-3 border-t border-white/6 px-3.5 py-2.5">
+            <p className="text-[11.5px] leading-[1.5] text-muted">
+              {totals.tray} tray client{totals.tray === 1 ? "" : "s"} from Roblox's own updater
+              {showTray ? " shown above." : " hidden here. They are not launches."}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowTray((value) => !value)}
+              className="ui shrink-0 h-6 rounded-control px-2 text-[11px] text-muted hover:bg-white/5 hover:text-body"
+            >
+              {showTray ? "Hide" : "Show"}
+            </button>
+          </div>
+        ) : null}
       </Section>
 
       <p className="mt-4 text-[11px] leading-[1.6] text-muted">
-        Read from {totals.count} log{totals.count === 1 ? "" : "s"} in Roblox's own log folder. Roblox
-        keeps the recent ones and deletes the rest, so an empty week is the folder, not the app.
+        Read from {receipts.length} log{receipts.length === 1 ? "" : "s"} in Roblox's own log
+        folder. Roblox keeps the recent ones and deletes the rest, so an empty week is the
+        folder, not the app.
       </p>
     </>
   );
@@ -485,7 +516,13 @@ function Segmented({
 function ReceiptRow({ receipt }: { receipt: Receipt }) {
   const [open, setOpen] = useState(false);
   const tone = OUTCOME[receipt.outcome];
-  const title = receipt.name ?? (receipt.place ? `Place ${receipt.place}` : "No place asked for");
+  const title = receipt.name
+    ? receipt.name
+    : receipt.place
+      ? `Place ${receipt.place}`
+      : receipt.outcome === "tray"
+        ? "Roblox's tray client"
+        : "No place asked for";
 
   return (
     <div className="border-b border-white/6 last:border-b-0">
@@ -556,6 +593,9 @@ function Details({ receipt }: { receipt: Receipt }) {
 
   return (
     <div className="border-t border-white/6 bg-black/15 px-3.5 py-3 pl-[42px]">
+      {/* The row clips its verdict to one line so the list stays scannable; the sentence
+          itself is the useful part when it does not fit, so it is repeated here whole. */}
+      <p className="mb-2.5 max-w-[70ch] text-[12px] leading-[1.55] text-body">{receipt.verdict}</p>
       <dl className="text-[11.5px]">
         <Fact label="Started">{stamp(receipt.started)}</Fact>
         <Fact label="Client">{receipt.version}</Fact>

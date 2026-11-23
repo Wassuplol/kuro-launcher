@@ -41,7 +41,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | **Search** | Games and people from Roblox's index, one deliberate query at a time |
 | **Game page** | Description, visits, rating, max players, and the public server list on a tab |
 | **Library** | The games the account has starred, paged and filterable, and this machine's own record of what it launched |
-| **Sessions** | Every launch this machine still has a log for, read from the client's own file: where it went, how long it lasted, and what it said when it stopped |
+| **Sessions** | Every launch this machine still has a log for, read from the client's own file: where it went, how long it lasted, and what it said when it stopped. Roblox's own tray clients are counted on their own line, because they are not launches |
 | **Friends** | The account's friends with live presence, and a Join that lands in the exact server a friend is in |
 | **Assistant** | A pane docked beside the page, streamed as it writes. It reads the current screen, the saved accounts and what is running, proposes one action at a time, and never starts anything itself |
 | **Accounts** | Quick Login (six-character code or QR), cookie import, DPAPI vault, session health, forget, default |
@@ -85,7 +85,7 @@ folder and run `sha256sum -c SHA256SUMS.txt` before running anything.
 | An updater | The app never phones home for anything but Roblox, so an update is a download, not a push |
 | Studio's links | `roblox-studio` and `roblox-studio-auth` stay with Studio. A place editor is not a game launch, and taking it would be a lie about what this app is |
 
-## Three things this app had to measure, not assume
+## Six things this app had to measure, not assume
 
 Roblox's docs are thinner than its behaviour, so the code carries the measurements
 that decided its shape. Each one is a comment beside the constant it produced.
@@ -113,6 +113,13 @@ a tab.
 event while the command is still running, so the pane paints as the model writes. A
 stop flag is checked between deltas, because a Stop that only stops listening leaves
 the model talking to nobody.
+
+**Roblox's own tray client writes a player log too.** The updater opens one on its own
+schedule, fetches its flags, sits in the notification area and asks for no place. It is
+indistinguishable from a launch that died until the log is read for the tray markers, so
+the Sessions page counts them on a separate line and hides them by default. Without that
+distinction an afternoon of ordinary updater activity reads as six failures, which is
+exactly what happened here before it was measured.
 
 **Presence is priced twice.** A friend list is twenty calls a minute, the tightest
 budget in the app, and it comes back as ids with empty names, so it is two more calls

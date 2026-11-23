@@ -634,7 +634,7 @@ export type Receipt = {
   shutdownStage: string | null;
   httpErrors: number;
   lastHttp: string | null;
-  outcome: "left" | "ended" | "no_handshake" | "never_joined" | "crashed";
+  outcome: "left" | "ended" | "no_handshake" | "never_joined" | "tray" | "crashed";
   verdict: string;
   action: string | null;
   lines: number;

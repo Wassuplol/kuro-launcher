@@ -46,6 +46,9 @@ pub enum Outcome {
     NoHandshake,
     /// The client opened and never asked for a place at all.
     NeverJoined,
+    /// Roblox's own updater opened a tray client and left it running. Nothing was
+    /// launched from this app, so this is not a launch that failed.
+    Tray,
     /// The client logged a crash marker while it was running.
     Crashed,
 }
@@ -256,6 +259,9 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
     let mut http_errors = 0u64;
     let mut last_http = None;
     let mut crash = false;
+    let mut tray = false;
+    let mut no_reload = false;
+    let mut settings_failed = false;
 
     let mut first_stamp: Option<i64> = None;
     let mut last_stamp: Option<i64> = None;
@@ -416,7 +422,42 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
         {
             crash = true;
         }
+
+        // The bootstrapper's own no-reload guard: it found the app already running, wrote
+        // this and destroyed itself in under a tenth of a second. Nothing was asked for
+        // because there was nothing to start, not because a launch went wrong.
+        if line.contains("NoReload Detector: App NoReload") {
+            no_reload = true;
+        }
+
+        // Roblox's own updater starts a tray client that sits in the notification area
+        // waiting for a launch it may never receive, and it writes a player log like any
+        // other. Without this marker every sleepy updater is counted as a launch that
+        // failed here, and a machine that played nothing all day reads as six failures.
+        if line.contains("Tray treatment is ON")
+            || line.contains("Systray initialized in")
+            || line.contains("AppState/TrayMode")
+        {
+            tray = true;
+        }
+
+        // The client's first act is to fetch its flags from clientsettingscdn. Behind a
+        // filter that breaks that TLS handshake the fetch fails, the client writes a few
+        // kilobytes and exits without ever reading the launch URI, and from the outside
+        // that is indistinguishable from a launch this app got wrong.
+        if line.contains("Failed to download or apply critical settings")
+            || line.contains("SslConnectFail")
+        {
+            settings_failed = true;
+        }
     }
+
+    // A failed request to the settings host is the same fact from the other side, and it
+    // is the one network fault worth naming: nothing about this app or that place is wrong.
+    let settings_failed = settings_failed
+        || last_http
+            .as_deref()
+            .is_some_and(|last| last.contains("clientsettings"));
 
     if let Some(chosen) = &adapter {
         for item in adapters.iter_mut() {
@@ -449,6 +490,8 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
         } else {
             Outcome::Ended
         }
+    } else if tray {
+        Outcome::Tray
     } else if place.is_some() {
         Outcome::NoHandshake
     } else {
@@ -463,6 +506,16 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
             "The log stops without a shutdown line, which is what closing the window looks like."
                 .to_string()
         }
+        Outcome::Tray => {
+            "Roblox's own updater opened a tray client and left it waiting. Nothing was launched \
+             from here."
+                .to_string()
+        }
+        Outcome::NoHandshake if settings_failed => {
+            "The client could not fetch its settings from Roblox's CDN, so no server was reached. \
+             That is the network, not this app."
+                .to_string()
+        }
         Outcome::NoHandshake => {
             let mut text = "Stopped before it reached a server.".to_string();
             if let Some(last) = &last_http {
@@ -474,6 +527,16 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
             }
             text
         }
+        Outcome::NeverJoined if settings_failed => {
+            "The client stopped while fetching its settings from Roblox's CDN, before it read a \
+             place. Nothing about that place is wrong."
+                .to_string()
+        }
+        Outcome::NeverJoined if no_reload => {
+            "Another client was already running, so Roblox's own no-reload guard made this one \
+             step aside."
+                .to_string()
+        }
         Outcome::NeverJoined => {
             "The client opened but never asked for a place. Usually the bootstrapper handing over."
                 .to_string()
@@ -483,6 +546,7 @@ pub fn parse(path: &Path, file: &str) -> Option<Receipt> {
 
     let action = match outcome {
         Outcome::NoHandshake => Some("Check the network".to_string()),
+        Outcome::NeverJoined if settings_failed => Some("Check the network".to_string()),
         Outcome::Crashed => Some("Open the log".to_string()),
         _ => None,
     };
@@ -794,6 +858,34 @@ mod tests {
 2026-11-18T10:10:09.900Z,1.900000,4b78,12 [DFLog::HttpTraceError] HttpResponse(#9) status:401 Not Found bodySize:0 url:{ \"https://apis.roblox.com/authentication-service/v1/tickets\" } ip:128.116.4.2
 ";
 
+    /// The updater's own tray client, taken from a real one: it fetches flags, opens the
+    /// notification area and waits. It wrote 36 lines and asked for no place.
+    const TRAY: &str = "\
+2026-11-23T17:39:56.090Z,0.090495,57b8,6,Warning [FLog::RobloxStarterNetworkStarterModule] userAgent: Roblox/WinInetRobloxApp/0.748.0.7481526 (GlobalDist; RobloxDirectDownload) AppState/TrayMode
+2026-11-23T17:39:56.170Z,0.170362,6f8c,6,Warning [FLog::FlagFetchingStarterModule] Successfully loaded flags
+2026-11-23T17:39:56.189Z,0.189500,57b8,6,Warning [FLog::Systray] Tray treatment is ON)
+2026-11-23T17:39:56.189Z,0.189500,57b8,6,Info [FLog::Systray] Systray initialized in sync mode
+2026-11-23T17:39:56.189Z,0.189500,551c,6,Info [FLog::Systray] Starting background update timers
+2026-11-23T17:39:56.467Z,0.467557,84ec,6,Info [FLog::Systray] No new version available, current version is 0.748.0.7481526
+";
+
+    /// A client that never got past its own flag fetch. Shape taken from the lines the
+    /// client writes behind a filter that breaks TLS to clientsettingscdn.
+    const NO_SETTINGS: &str = "\
+2026-11-23T16:44:02.000Z,0.000000,1111,6,Warning [FLog::FlagFetchingStarterModule] Fetching flags from CDN, attempt: 0
+2026-11-23T16:44:02.400Z,0.400000,1111,6,Error [FLog::FlagFetchingStarterModule] fetch flag exception: HttpError: SslConnectFail
+2026-11-23T16:44:03.900Z,1.900000,1111,6,Error [FLog::RobloxStarter] Failed to download or apply critical settings
+";
+
+    /// A client that quit because one was already running. Eight lines, no place, and
+    /// nothing wrong: the bootstrapper's own guard did it.
+    const NO_RELOAD: &str = "\
+2026-11-23T16:42:43.092Z,0.092839,3f38,6,Warning [FLog::RobloxStarter] Starting module: Logging
+2026-11-23T16:42:43.094Z,0.094839,3f38,6,Warning [FLog::Output] NoReload Detector: warm start adjustment: 101
+2026-11-23T16:42:43.094Z,0.094839,3f38,6,Warning [FLog::Output] NoReload Detector: App NoReload!
+2026-11-23T16:42:43.095Z,0.095839,3f38,6,Warning [FLog::RobloxStarter] RobloxStarter destroyed
+";
+
     fn write(dir: &Path, name: &str, body: &str) -> PathBuf {
         let path = dir.join(name);
         let mut file = fs::File::create(&path).unwrap();
@@ -860,6 +952,57 @@ mod tests {
         assert_eq!(receipt.http_errors, 2);
         assert_eq!(receipt.outcome, Outcome::NeverJoined);
         assert!(receipt.verdict.contains("never asked for a place"));
+    }
+
+    /// Roblox's updater opens a tray client on its own schedule. Counting that as a launch
+    /// this app made put six failures on a page for an afternoon in which nothing failed.
+    #[test]
+    fn a_tray_client_is_not_a_failed_launch() {
+        let dir = std::env::temp_dir().join("kuro-receipts-tray");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let name = "0.748.0.7481526_20261123T173956Z_Player_4798E_last.log";
+        let path = write(&dir, name, TRAY);
+
+        let receipt = parse(&path, name).expect("a receipt");
+        assert_eq!(receipt.outcome, Outcome::Tray);
+        assert_eq!(receipt.place, None);
+        assert!(!receipt.handshake);
+        assert!(receipt.verdict.contains("tray client"));
+        assert!(receipt.verdict.contains("Nothing was launched from here"));
+        assert_eq!(receipt.action, None, "there is nothing to fix");
+    }
+
+    /// The one network fault worth naming, because the remedy is the network: the client
+    /// never read the launch URI at all, so no destination or account was ever refused.
+    #[test]
+    fn a_settings_fetch_failure_names_the_cdn_instead_of_the_place() {
+        let dir = std::env::temp_dir().join("kuro-receipts-cdn");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let name = "0.748.0.7481526_20261123T164402Z_Player_11111_last.log";
+        let path = write(&dir, name, NO_SETTINGS);
+
+        let receipt = parse(&path, name).expect("a receipt");
+        assert!(!receipt.handshake);
+        assert_eq!(receipt.outcome, Outcome::NeverJoined);
+        assert!(receipt.verdict.contains("settings from Roblox's CDN"));
+        assert_eq!(receipt.action.as_deref(), Some("Check the network"));
+    }
+
+    #[test]
+    fn a_client_that_stepped_aside_says_so_instead_of_blaming_a_handover() {
+        let dir = std::env::temp_dir().join("kuro-receipts-noreload");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let name = "0.748.0.7481526_20261123T164243Z_Player_95CCC_last.log";
+        let path = write(&dir, name, NO_RELOAD);
+
+        let receipt = parse(&path, name).expect("a receipt");
+        assert_eq!(receipt.outcome, Outcome::NeverJoined);
+        assert!(!receipt.handshake);
+        assert!(receipt.verdict.contains("no-reload guard made this one"));
+        assert_eq!(receipt.action, None);
     }
 
     #[test]
